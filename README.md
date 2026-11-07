@@ -75,17 +75,25 @@ video; audio is not part of this pipeline.
    sudo apt install python3-opencv python3-numpy
    ```
 
-   Alternatively, in a Python virtual environment, install the packages in
-   `requirements.txt` with `python -m pip install -r requirements.txt`. OpenCV
-   wheels and video codecs must be supported by your system; do not use the
-   headless OpenCV package for the fullscreen window.
-3. Add a locally playable video, for example `assets/fishtank.mp4`. No video is
-   included in the repository. Edit `config.json` if your capture device or
-   video file differs.
+   Alternatively, create a Python virtual environment and install the
+   dependencies there:
+
+   ```bash
+   python3 -m venv .venv
+   .venv/bin/python -m pip install -r requirements.txt
+   ```
+
+   If creating the environment fails, install `python3-venv` with apt first.
+   OpenCV wheels and video codecs must be supported by your system; do not use
+   the headless OpenCV package for the fullscreen window.
+3. The repository includes `assets/fishtank.mp4`. Edit `config.json` if your
+   capture device or video file differs.
 4. From the project directory, run:
 
    ```bash
-   python3 main.py
+   python3 main.py                  # apt-installed dependencies
+   # OR
+   .venv/bin/python main.py         # virtual environment
    ```
 
    To use a different configuration file, run `python3 main.py --config
@@ -115,6 +123,56 @@ The program reports capture and video open/read errors and exits rather than
 pretending a failed video is playing. Check device permissions, codec support,
 the configured path, and whether the source is HDCP-protected if startup or
 capture fails.
+
+## Updating on Raspberry Pi
+
+These steps assume the Pi already has a Git clone of the repository. Changes
+made on another computer must be committed and pushed to the branch used by
+the Pi before they can be downloaded. For example, on that computer, use
+`git push origin main` after committing changes on `main`.
+
+1. Quit Happy Space with `q`, then open a terminal on the Pi and change to
+   your clone's directory:
+
+   ```bash
+   cd /path/to/HappySpace
+   git status
+   ```
+
+   Check for local changes before updating. In particular, `config.json` and
+   the included video are tracked by Git. Back up any changes you want to keep.
+   Git may refuse an update if local changes would be overwritten; commit or
+   stash them first rather than discarding them. If you use `git stash`, restore
+   the changes afterward with `git stash pop` and resolve any conflicts.
+2. Update the current branch from its configured upstream:
+
+   ```bash
+   git pull --ff-only
+   ```
+
+   If there is no upstream branch, or the branch has diverged, inspect
+   `git status` and resolve the branch situation before continuing. A pull
+   cannot fetch changes that have not yet been pushed.
+3. Refresh dependencies using the same installation method used for setup:
+
+   ```bash
+   # Virtual environment
+   .venv/bin/python -m pip install -r requirements.txt
+
+   # OR, for apt-installed dependencies
+   sudo apt update
+   sudo apt install python3-opencv python3-numpy
+   ```
+
+4. Start the app again in a graphical desktop session, using the corresponding
+   command from Getting started.
+
+To keep Pi-specific settings separate from the tracked `config.json`, create a
+copy once with `cp config.json config.pi.json`, edit it, and start with
+`python3 main.py --config config.pi.json` (or use `.venv/bin/python` for a
+virtual environment). Keep the copy in the project directory so its relative
+video path still points to `assets/fishtank.mp4`. Do not rerun the copy command
+if it would overwrite settings you want to keep.
 
 ## Future architecture
 
