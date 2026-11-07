@@ -1,5 +1,6 @@
 import http.client
 import json
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, call, patch
@@ -67,6 +68,36 @@ class ControllerTests(unittest.TestCase):
 
 class PlayerTests(unittest.TestCase):
     @patch("src.player.cv2.VideoCapture")
+    def test_random_mode_switches_at_end_of_video(self, video_capture):
+        first, second = Mock(), Mock()
+        first.isOpened.return_value = second.isOpened.return_value = True
+        first.read.return_value = (False, None)
+        second.read.return_value = (True, "next frame")
+        video_capture.side_effect = [first, second]
+        next_video = Mock(return_value=Path("next.mp4"))
+        player = CalmingVideoPlayer("first.mp4", next_video=next_video)
+        self.assertEqual(player.get_frame(None), "next frame")
+        next_video.assert_called_once()
+        self.assertEqual(player.video_path, Path("next.mp4"))
+        first.release.assert_called_once()
+        player.release()
+        second.release.assert_called_once()
+
+    @patch("src.player.cv2.VideoCapture")
+    def test_failed_switch_preserves_original_capture(self, video_capture):
+        first, bad = Mock(), Mock()
+        first.isOpened.return_value = True
+        bad.isOpened.return_value = False
+        video_capture.side_effect = [first, bad]
+        player = CalmingVideoPlayer("first.mp4")
+        with self.assertRaisesRegex(RuntimeError, "Could not open"):
+            player.switch("bad.mp4")
+        bad.release.assert_called_once()
+        first.release.assert_not_called()
+        self.assertEqual(player.video_path, "first.mp4")
+        player.release()
+
+    @patch("src.player.cv2.VideoCapture")
     def test_loops_and_releases_video(self, video_capture):
         capture = video_capture.return_value
         capture.isOpened.return_value = True
@@ -109,6 +140,93 @@ class PlayerTests(unittest.TestCase):
 
 
 class ApplicationTests(unittest.TestCase):
+    @patch("main.cv2.destroyAllWindows")
+    @patch("main.cv2.waitKey")
+    @patch("main.cv2.imshow")
+    @patch("main.cv2.setWindowProperty")
+    @patch("main.cv2.namedWindow")
+    @patch("main.WebRemote")
+    @patch("main.CalmingVideoPlayer")
+    @patch("main.VideoCapture")
+    @patch("main.load_config", return_value={
+        "capture_device_id": 0, "calming_video_path": "video.mp4"
+    })
+    def test_quit_keys_release_all_resources(
+        self, load_config, capture_type, player_type, web_type, named_window,
+        set_window_property, imshow, wait_key, destroy_windows,
+    ):
+        for key in (ord("q"), 27):
+            with self.subTest(key=key):
+                capture_type.reset_mock()
+                player_type.reset_mock()
+                web_type.reset_mock()
+                destroy_windows.reset_mock()
+                wait_key.reset_mock()
+                wait_key.return_value = key
+                capture_type.return_value.read_frame.return_value = (True, "live")
+                main.run(Path("/project/config.json"), ("127.0.0.1", 8080),
+                         "password12345")
+                wait_key.assert_called_once_with(1)
+                capture_type.return_value.release.assert_called_once()
+                player_type.return_value.release.assert_called_once()
+                web_type.return_value.close.assert_called_once()
+                destroy_windows.assert_called_once()
+
+    @patch("main.cv2.destroyAllWindows")
+    @patch("main.cv2.waitKey")
+    @patch("main.cv2.imshow")
+    @patch("main.cv2.setWindowProperty")
+    @patch("main.cv2.namedWindow")
+    @patch("main.CalmingVideoPlayer")
+    @patch("main.VideoCapture")
+    @patch("main.load_config", return_value={
+        "capture_device_id": 0, "calming_video_path": "video.mp4"
+    })
+    def test_remote_setting_is_saved_and_applied_on_next_frame(
+        self, load_config, capture_type, player_type, named_window,
+        set_window_property, imshow, wait_key, destroy_windows,
+    ):
+        from src.web_remote import WebRemote
+
+        servers = []
+        capture_type.return_value.read_frame.return_value = (True, "live")
+
+        def make_remote(address, password, state):
+            server = WebRemote(address, password, state)
+            servers.append(server)
+            return server
+
+        def save_setting():
+            connection = http.client.HTTPConnection(
+                "127.0.0.1", servers[0].server.server_port, timeout=5
+            )
+            try:
+                connection.request(
+                    "POST", "/api/settings",
+                    json.dumps({"mode": "file", "file": "fishtank.mp4"}),
+                    {"Authorization": "Bearer a-strong-password",
+                     "Content-Type": "application/json"},
+                )
+                response = connection.getresponse()
+                self.assertEqual(response.status, 200)
+                response.read()
+            finally:
+                connection.close()
+            return -1
+
+        actions = [save_setting, ord("q")]
+        wait_key.side_effect = lambda _: actions.pop(0)() if len(actions) == 2 else actions.pop(0)
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "config.json"
+            with patch("main.WebRemote", side_effect=make_remote):
+                main.run(config, ("127.0.0.1", 0), "a-strong-password")
+            setting_path = config.parent / ".happyspace-settings" / config.name
+            self.assertEqual(json.loads(setting_path.read_text()),
+                             {"mode": "file", "file": "fishtank.mp4"})
+        player_type.return_value.switch.assert_called_once_with(
+            Path(main.__file__).resolve().parent / "assets" / "fishtank.mp4"
+        )
+
     @patch("main.cv2.destroyAllWindows")
     @patch("main.cv2.waitKey")
     @patch("main.cv2.imshow")

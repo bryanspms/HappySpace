@@ -9,6 +9,7 @@ from src.capture import VideoCapture
 from src.controller import DisplayController
 from src.detector import CommercialDetector
 from src.player import CalmingVideoPlayer
+from src.settings import VideoSettings
 from src.web_remote import RemoteState, WebRemote, read_password
 
 
@@ -20,15 +21,23 @@ def load_config(path):
 def run(config_path, web_address=None, web_password=None):
     config = load_config(config_path)
     video_path = config_path.parent / config["calming_video_path"]
+    settings = VideoSettings(
+        Path(__file__).resolve().parent / "assets",
+        config_path.parent / ".happyspace-settings" / config_path.name,
+    )
+    choice, settings_revision = settings.snapshot()
+    initial_video = settings.path_for(choice, video_path)
     capture = VideoCapture(config["capture_device_id"])
     player = None
     remote = None
     try:
         player = CalmingVideoPlayer(
-            video_path,
+            initial_video,
             config.get("timer_font_scale", 1.0),
             config.get("timer_color", [255, 255, 255]),
         )
+        if choice["mode"] == "random":
+            player.next_video = lambda: settings.path_for(settings.snapshot()[0], video_path)
         controller = DisplayController(CommercialDetector())
 
         cv2.namedWindow("Happy Space", cv2.WND_PROP_FULLSCREEN)
@@ -37,12 +46,12 @@ def run(config_path, web_address=None, web_password=None):
         )
         remote_state = None
         if web_address is not None:
-            remote_state = RemoteState()
+            remote_state = RemoteState(settings)
             remote_state.update(controller)
             remote = WebRemote(web_address, web_password, remote_state)
             remote.start()
             print(f"Web remote listening on {web_address[0]}:{remote.server.server_port}.")
-        print("Live feed active. m: toggle video, d: toggle demo, q: quit.")
+        print("Live feed active. m: toggle video, d: toggle demo, q or Esc: quit.")
 
         previous_selection = False
         while True:
@@ -52,6 +61,13 @@ def run(config_path, web_address=None, web_password=None):
 
             if remote_state is not None:
                 remote_state.apply_commands(controller)
+            choice, revision = settings.snapshot()
+            if revision != settings_revision:
+                player.switch(settings.path_for(choice, video_path))
+                player.next_video = (
+                    lambda: settings.path_for(settings.snapshot()[0], video_path)
+                ) if choice["mode"] == "random" else None
+                settings_revision = revision
             use_calming_video, remaining = controller.selection(live_frame)
             if remote_state is not None:
                 remote_state.update(controller)
@@ -66,7 +82,7 @@ def run(config_path, web_address=None, web_password=None):
             frame = player.get_frame(remaining) if use_calming_video else live_frame
             cv2.imshow("Happy Space", frame)
             key = cv2.waitKey(1) & 0xFF
-            if key == ord("q"):
+            if key in (ord("q"), 27):
                 break
             controller.handle_key(key)
     finally:

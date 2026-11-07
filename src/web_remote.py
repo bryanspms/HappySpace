@@ -9,11 +9,17 @@ from urllib.parse import urlsplit
 
 
 PAGE = (Path(__file__).with_name("remote.html")).read_bytes()
+ASSET_DIR = Path(__file__).resolve().parent.parent / "assets"
+IMAGES = {
+    "/happy-space-logo.png": (ASSET_DIR / "happy-space-logo.png").read_bytes(),
+    "/happy-space-icon.png": (ASSET_DIR / "happy-space-icon.png").read_bytes(),
+}
 COMMANDS = {"live", "calming", "demo-on", "demo-off"}
 
 
 class RemoteState:
-    def __init__(self):
+    def __init__(self, settings=None):
+        self.settings = settings
         self.commands = queue.Queue(maxsize=32)
         self.lock = threading.Lock()
         self.status = {"selection": "live", "demo": False, "updated": 0.0}
@@ -105,16 +111,32 @@ class RemoteHandler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/":
             self.respond(200, PAGE, "text/html; charset=utf-8")
+        elif path in IMAGES:
+            self.respond(200, IMAGES[path], "image/png")
         elif path == "/api/status":
             if not self.authorized():
                 self.json_response(401, {"error": "Invalid password"})
                 return
             self.json_response(200, self.server.state.snapshot())
+        elif path == "/api/settings":
+            if not self.authorized():
+                self.json_response(401, {"error": "Invalid password"})
+                return
+            settings = self.server.state.settings
+            if settings is None:
+                self.json_response(503, {"error": "Settings unavailable"})
+                return
+            try:
+                choice, _ = settings.snapshot()
+                self.json_response(200, {"video": choice, "videos": settings.videos()})
+            except (OSError, ValueError) as error:
+                self.json_response(500, {"error": str(error)})
         else:
             self.json_response(404, {"error": "Not found"})
 
     def do_POST(self):
-        if urlsplit(self.path).path != "/api/command":
+        path = urlsplit(self.path).path
+        if path not in {"/api/command", "/api/settings"}:
             self.json_response(404, {"error": "Not found"})
             return
         if not self.authorized():
@@ -128,13 +150,31 @@ class RemoteHandler(BaseHTTPRequestHandler):
         except ValueError:
             self.json_response(400, {"error": "Invalid content length"})
             return
-        if not 0 < length <= 256:
+        if not 0 < length <= 4096:
             self.json_response(400, {"error": "Invalid content length"})
             return
         try:
             data = json.loads(self.rfile.read(length))
         except (UnicodeDecodeError, json.JSONDecodeError):
             self.json_response(400, {"error": "Invalid JSON"})
+            return
+        if path == "/api/settings":
+            settings = self.server.state.settings
+            if settings is None:
+                self.json_response(503, {"error": "Settings unavailable"})
+                return
+            try:
+                settings.save(data)
+            except ValueError as error:
+                self.json_response(400, {"error": str(error)})
+                return
+            except OSError as error:
+                self.json_response(500, {"error": f"Could not save settings: {error}"})
+                return
+            self.json_response(200, {"saved": True})
+            return
+        if length > 256:
+            self.json_response(400, {"error": "Invalid content length"})
             return
         if (not isinstance(data, dict) or not isinstance(data.get("command"), str)
                 or data["command"] not in COMMANDS):

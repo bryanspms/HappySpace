@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from src.controller import DisplayController
+from src.settings import VideoSettings
 from src.web_remote import RemoteState, WebRemote, read_password
 
 
@@ -14,7 +15,14 @@ PASSWORD = "a-strong-password"
 
 class WebRemoteTests(unittest.TestCase):
     def setUp(self):
-        self.state = RemoteState()
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        root = Path(self.directory.name)
+        assets = root / "assets"
+        assets.mkdir()
+        (assets / "fireplace.mp4").write_bytes(b"video")
+        self.settings = VideoSettings(assets, root / "settings.json")
+        self.state = RemoteState(self.settings)
         self.controller = DisplayController(Mock())
         self.state.update(self.controller)
         self.remote = WebRemote(("127.0.0.1", 0), PASSWORD, self.state)
@@ -45,6 +53,18 @@ class WebRemoteTests(unittest.TestCase):
         self.assertEqual(self.request("POST", "/api/command", '{"command":"live"}',
                                       password="wrong")[0], 401)
         self.assertTrue(self.state.commands.empty())
+
+    def test_logo_and_icon_are_served_without_exposing_other_assets(self):
+        status, page = self.request("GET", "/", password=None)
+        self.assertEqual(status, 200)
+        self.assertIn(b'/happy-space-logo.png', page)
+        self.assertIn(b'/happy-space-icon.png', page)
+        for path in ("/happy-space-logo.png", "/happy-space-icon.png"):
+            with self.subTest(path=path):
+                status, image = self.request("GET", path, password=None)
+                self.assertEqual(status, 200)
+                self.assertTrue(image.startswith(b"\x89PNG\r\n\x1a\n"))
+        self.assertEqual(self.request("GET", "/assets/fishtank.mp4", password=None)[0], 404)
 
     def test_commands_update_controller_and_status(self):
         for command, selection, demo in [
@@ -85,6 +105,25 @@ class WebRemoteTests(unittest.TestCase):
         self.state.update(self.controller)
         _, body = self.request("GET", "/api/status")
         self.assertEqual(json.loads(body)["selection"], "calming")
+
+    def test_settings_are_authenticated_and_persisted(self):
+        self.assertEqual(self.request("GET", "/api/settings", password=None)[0], 401)
+        self.assertEqual(self.request("POST", "/api/settings", '{"mode":"random"}',
+                                      password="wrong")[0], 401)
+        self.assertFalse(self.settings.settings_path.exists())
+        code, data = self.request("GET", "/api/settings")
+        self.assertEqual(code, 200)
+        self.assertEqual(json.loads(data),
+                         {"video": {"mode": "default"}, "videos": ["fireplace.mp4"]})
+        code, _ = self.request("POST", "/api/settings", '{"mode":"random"}')
+        self.assertEqual(code, 200)
+        self.assertEqual(json.loads(self.settings.settings_path.read_text()),
+                         {"mode": "random"})
+        code, data = self.request("GET", "/api/settings")
+        self.assertEqual(json.loads(data)["video"], {"mode": "random"})
+        self.assertEqual(self.request("POST", "/api/settings",
+                                      '{"mode":"file","file":"../outside.mp4"}')[0], 400)
+        self.assertEqual(self.settings.snapshot()[0], {"mode": "random"})
 
 
 class PasswordTests(unittest.TestCase):
