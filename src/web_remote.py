@@ -1,0 +1,163 @@
+import hmac
+import json
+import queue
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import urlsplit
+
+
+PAGE = (Path(__file__).with_name("remote.html")).read_bytes()
+COMMANDS = {"live", "calming", "demo-on", "demo-off"}
+
+
+class RemoteState:
+    def __init__(self):
+        self.commands = queue.Queue(maxsize=32)
+        self.lock = threading.Lock()
+        self.status = {"selection": "live", "demo": False, "updated": 0.0}
+
+    def update(self, controller):
+        with self.lock:
+            self.status = {
+                "selection": "calming" if controller.is_commercial else "live",
+                "demo": controller.demo_enabled,
+                "updated": time.monotonic(),
+            }
+
+    def snapshot(self):
+        with self.lock:
+            return {
+                "selection": self.status["selection"],
+                "demo": self.status["demo"],
+                "age_seconds": round(time.monotonic() - self.status["updated"], 1),
+            }
+
+    def apply_commands(self, controller):
+        for _ in range(self.commands.maxsize):
+            try:
+                command = self.commands.get_nowait()
+            except queue.Empty:
+                break
+            if command == "live":
+                controller.select_manual(False)
+            elif command == "calming":
+                controller.select_manual(True)
+            elif command == "demo-on":
+                controller.set_demo(True)
+            elif command == "demo-off":
+                controller.set_demo(False)
+
+
+def read_password(path):
+    password = path.read_text(encoding="utf-8").strip()
+    if not 12 <= len(password) <= 256 or not all(32 <= ord(c) <= 126 for c in password):
+        raise ValueError("Web password must be 12-256 printable ASCII characters.")
+    return password
+
+
+class RemoteServer(ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+    def __init__(self, address, password, state):
+        super().__init__(address, RemoteHandler)
+        self.password = password.encode("utf-8")
+        self.state = state
+
+
+class RemoteHandler(BaseHTTPRequestHandler):
+    server: RemoteServer
+
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(5)
+
+    def log_message(self, _format, *_args):
+        # Never log request targets or credentials.
+        return
+
+    def respond(self, code, body, content_type="application/json"):
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def json_response(self, code, value):
+        self.respond(code, json.dumps(value).encode("utf-8"))
+
+    def authorized(self):
+        value = self.headers.get("Authorization", "")
+        try:
+            supplied = value.removeprefix("Bearer ").encode("utf-8")
+        except UnicodeError:
+            return False
+        return value.startswith("Bearer ") and hmac.compare_digest(
+            supplied, self.server.password
+        )
+
+    def do_GET(self):
+        path = urlsplit(self.path).path
+        if path == "/":
+            self.respond(200, PAGE, "text/html; charset=utf-8")
+        elif path == "/api/status":
+            if not self.authorized():
+                self.json_response(401, {"error": "Invalid password"})
+                return
+            self.json_response(200, self.server.state.snapshot())
+        else:
+            self.json_response(404, {"error": "Not found"})
+
+    def do_POST(self):
+        if urlsplit(self.path).path != "/api/command":
+            self.json_response(404, {"error": "Not found"})
+            return
+        if not self.authorized():
+            self.json_response(401, {"error": "Invalid password"})
+            return
+        if self.headers.get_content_type() != "application/json":
+            self.json_response(415, {"error": "Expected JSON"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            self.json_response(400, {"error": "Invalid content length"})
+            return
+        if not 0 < length <= 256:
+            self.json_response(400, {"error": "Invalid content length"})
+            return
+        try:
+            data = json.loads(self.rfile.read(length))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self.json_response(400, {"error": "Invalid JSON"})
+            return
+        if (not isinstance(data, dict) or not isinstance(data.get("command"), str)
+                or data["command"] not in COMMANDS):
+            self.json_response(400, {"error": "Invalid command"})
+            return
+        try:
+            self.server.state.commands.put_nowait(data["command"])
+        except queue.Full:
+            self.json_response(503, {"error": "Command queue is full"})
+            return
+        self.json_response(202, {"accepted": True})
+
+
+class WebRemote:
+    def __init__(self, address, password, state):
+        self.server = RemoteServer(address, password, state)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+
+    def start(self):
+        self.thread.start()
+
+    def close(self):
+        if self.thread.is_alive():
+            self.server.shutdown()
+            self.thread.join()
+        self.server.server_close()

@@ -1,3 +1,5 @@
+import http.client
+import json
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, call, patch
@@ -50,6 +52,18 @@ class ControllerTests(unittest.TestCase):
         self.controller.handle_key(ord("d"))
         self.assertEqual(self.controller.selection(None), (False, None))
 
+    def test_explicit_controls_are_idempotent_and_override_demo(self):
+        self.controller.set_demo(True)
+        self.controller.set_demo(True)
+        self.detector.reset.assert_called_once()
+        self.controller.select_manual(True)
+        self.assertEqual(self.controller.selection(None), (True, None))
+        self.assertFalse(self.controller.demo_enabled)
+        self.controller.select_manual(True)
+        self.assertEqual(self.controller.selection(None), (True, None))
+        self.controller.set_demo(False)
+        self.assertEqual(self.controller.selection(None), (True, None))
+
 
 class PlayerTests(unittest.TestCase):
     @patch("src.player.cv2.VideoCapture")
@@ -95,6 +109,102 @@ class PlayerTests(unittest.TestCase):
 
 
 class ApplicationTests(unittest.TestCase):
+    @patch("main.cv2.destroyAllWindows")
+    @patch("main.cv2.waitKey")
+    @patch("main.cv2.imshow")
+    @patch("main.cv2.setWindowProperty")
+    @patch("main.cv2.namedWindow")
+    @patch("main.CalmingVideoPlayer")
+    @patch("main.VideoCapture")
+    @patch("main.load_config", return_value={
+        "capture_device_id": 0, "calming_video_path": "video.mp4"
+    })
+    def test_web_command_changes_display_on_next_frame(
+        self, load_config, capture_type, player_type, named_window,
+        set_window_property, imshow, wait_key, destroy_windows,
+    ):
+        capture_type.return_value.read_frame.return_value = (True, "live")
+        player_type.return_value.get_frame.return_value = "calm"
+        from src.web_remote import WebRemote
+
+        servers = []
+
+        def make_remote(address, password, state):
+            server = WebRemote(address, password, state)
+            servers.append(server)
+            return server
+
+        def send_command():
+            connection = http.client.HTTPConnection(
+                "127.0.0.1", servers[0].server.server_port, timeout=5
+            )
+            try:
+                connection.request("POST", "/api/command",
+                                   json.dumps({"command": "calming"}),
+                                   {"Authorization": "Bearer a-strong-password",
+                                    "Content-Type": "application/json"})
+                response = connection.getresponse()
+                self.assertEqual(response.status, 202)
+                response.read()
+            finally:
+                connection.close()
+            return -1
+
+        def wait_for_key(_):
+            action = wait_key.side_effects.pop(0)
+            return action() if callable(action) else action
+
+        wait_key.side_effects = [send_command, ord("q")]
+        wait_key.side_effect = wait_for_key
+        with patch("main.WebRemote", side_effect=make_remote):
+            main.run(Path("/project/config.json"), ("127.0.0.1", 0),
+                     "a-strong-password")
+        self.assertEqual(imshow.call_args_list,
+                         [call("Happy Space", "live"), call("Happy Space", "calm")])
+        player_type.return_value.reset.assert_called_once()
+
+    @patch("main.cv2.destroyAllWindows")
+    @patch("main.cv2.waitKey", return_value=ord("q"))
+    @patch("main.cv2.imshow")
+    @patch("main.cv2.setWindowProperty")
+    @patch("main.cv2.namedWindow")
+    @patch("main.WebRemote")
+    @patch("main.CalmingVideoPlayer")
+    @patch("main.VideoCapture")
+    @patch("main.load_config", return_value={
+        "capture_device_id": 0, "calming_video_path": "video.mp4"
+    })
+    def test_web_remote_starts_and_stops_with_application(
+        self, load_config, capture_type, player_type, web_type, named_window,
+        set_window_property, imshow, wait_key, destroy_windows,
+    ):
+        capture_type.return_value.read_frame.return_value = (True, "live")
+        main.run(Path("/project/config.json"), ("127.0.0.1", 8080), "password12345")
+        web_type.return_value.start.assert_called_once()
+        web_type.return_value.close.assert_called_once()
+        capture_type.return_value.release.assert_called_once()
+
+    @patch("main.cv2.destroyAllWindows")
+    @patch("main.cv2.setWindowProperty")
+    @patch("main.cv2.namedWindow")
+    @patch("main.WebRemote")
+    @patch("main.CalmingVideoPlayer")
+    @patch("main.VideoCapture")
+    @patch("main.load_config", return_value={
+        "capture_device_id": 0, "calming_video_path": "video.mp4"
+    })
+    def test_web_remote_stops_if_capture_fails(
+        self, load_config, capture_type, player_type, web_type, named_window,
+        set_window_property, destroy_windows,
+    ):
+        capture_type.return_value.read_frame.return_value = (False, None)
+        with self.assertRaisesRegex(RuntimeError, "Could not read from the capture"):
+            main.run(Path("/project/config.json"), ("127.0.0.1", 8080),
+                     "password12345")
+        web_type.return_value.close.assert_called_once()
+        capture_type.return_value.release.assert_called_once()
+        player_type.return_value.release.assert_called_once()
+
     @patch("main.cv2.destroyAllWindows")
     @patch("main.cv2.waitKey", side_effect=[ord("m"), ord("m"), ord("q")])
     @patch("main.cv2.imshow")

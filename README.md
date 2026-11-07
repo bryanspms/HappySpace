@@ -14,6 +14,8 @@ the remaining time.
 - Offers an **opt-in simulated detector** for testing: 10 seconds of live video,
   followed by a 5-second simulated break, repeating. Its countdown is based on
   that simulation, not on the input signal.
+- Optionally provides a password-protected web remote for a phone or other
+  device on the local network.
 
 **There is no real commercial detection yet.** The application processes
 video only: it does not capture, switch, mute, or play audio. It does not provide
@@ -53,6 +55,7 @@ flowchart LR
     live --> demo["Simulated detector<br/>(opt-in)"]
     demo -->|simulated state and countdown| controller
     keys["Keyboard controls"] --> controller
+    phone["Optional web remote"] --> controller
     asset["Local video file"] --> player["Looping video player"]
     controller -->|select live or calming frame| display["Fullscreen OpenCV window"]
     player --> display
@@ -123,6 +126,92 @@ The program reports capture and video open/read errors and exits rather than
 pretending a failed video is playing. Check device permissions, codec support,
 the configured path, and whether the source is HDCP-protected if startup or
 capture fails.
+
+## Phone remote
+
+The remote is disabled by default. It runs in the Happy Space process, so it
+becomes available only after the video and window have opened successfully;
+it stops when the app exits. The Pi still needs a graphical desktop session
+and a TV or display for the video, but a phone can replace the keyboard for
+switching modes.
+
+1. Connect the Pi and phone to the same **trusted** local network. HTTP does
+   not encrypt the password or commands. Anyone able to observe network
+   traffic could obtain the password. Do not expose the port to the internet,
+   configure router port forwarding, or use this on an untrusted network.
+   The password does not prevent guessing attempts; choose a strong, unique
+   password and restrict network access with your firewall if appropriate.
+2. Create a password file outside the repository. The password must contain
+   12-256 printable ASCII characters. For example, run the following **once**
+   on the Pi to generate one; the redirection overwrites an existing file:
+
+   ```bash
+   mkdir -p ~/.config/happyspace
+   umask 077
+   python3 -c 'import secrets; print(secrets.token_urlsafe(24))' > ~/.config/happyspace/password
+   cat ~/.config/happyspace/password
+   ```
+
+   Keep the file private and never commit or share it. The `cat` command shows
+   the password to enter on the phone.
+3. From the project directory, start the app in the Pi's graphical desktop:
+
+   ```bash
+   .venv/bin/python main.py --web --web-password-file ~/.config/happyspace/password
+   ```
+
+   If you installed the dependencies with apt instead, use `python3` in place
+   of `.venv/bin/python`. Add `--config /path/to/config.pi.json` if you use a
+   separate configuration.
+4. Run `hostname -I` on the Pi and find its local network address. On the
+   phone, open `http://PI_ADDRESS:8080/`, substituting that address, and enter
+   the password. Use the buttons to choose live video or the fish tank, or
+   turn the **simulated** demo on or off. Manual selection turns demo mode off.
+   The page reports the current selection, demo mode, and connection status;
+   it does not stream video to the phone.
+
+The default listener binds to all IPv4 interfaces on port 8080, not just
+Wi-Fi. Use `--web-bind PI_LOCAL_IP` to restrict the listening interface and
+`--web-port PORT` to change the port; update the phone's URL accordingly.
+Ensure the selected interface exists and the firewall permits access from
+your phone. A bind error or missing/invalid password file stops startup
+instead of enabling an unprotected remote.
+
+### Start automatically on the Pi
+
+The desktop's autostart facility can launch Happy Space when the Pi user logs
+in. Configure Raspberry Pi OS to log that user into the graphical desktop
+automatically if unattended startup is desired; this makes that account
+accessible to anyone with physical access. A display/TV and working capture
+device must be connected. This is not a headless system service.
+
+1. Test the phone remote manually first. Find the absolute project path with
+   `pwd` in its directory, and your user home directory with `echo "$HOME"`.
+2. Create `~/.config/autostart/happy-space.desktop` using a text editor, such
+   as `nano`, creating the directory first:
+
+   ```bash
+   mkdir -p ~/.config/autostart
+   nano ~/.config/autostart/happy-space.desktop
+   ```
+
+3. Paste the following, replacing **each** `/home/USER` and project path with
+   the Pi's actual absolute paths. For an apt installation, replace the first
+   executable with `/usr/bin/python3`. If using a custom configuration, add
+   `--config` and its absolute path to the `Exec` line.
+
+   ```ini
+   [Desktop Entry]
+   Type=Application
+   Name=Happy Space
+   Exec="/home/USER/HappySpace/.venv/bin/python" "/home/USER/HappySpace/main.py" --web --web-password-file "/home/USER/.config/happyspace/password"
+   Terminal=false
+   ```
+
+4. Log out and back in, or reboot, and open the remote from the phone. To
+   disable autostart, remove that desktop entry. The remote has no shutdown
+   button; `q` still exits when a keyboard is available. If startup fails,
+   run the manual command above in a desktop terminal to see the error.
 
 ## Updating on Raspberry Pi
 
@@ -206,7 +295,29 @@ With the runtime dependencies installed, run:
 
 ```bash
 python3 -m unittest discover -s tests -v
+# Or, with a virtual environment:
+.venv/bin/python -m unittest discover -s tests -v
 ```
 
 The tests use mocked devices; they do not validate actual capture hardware,
 HDMI compatibility, or on-screen rendering.
+
+## License
+
+Happy Space is licensed under the [MIT License](LICENSE). Copyright (c) 2026
+Bryan Price. See the license file for the full terms.
+
+## Attribution
+
+If you build upon Happy Space, attribution is appreciated:
+
+> Based on HappySpace (github.com/bryanspms/HappySpace) by Bryan Price
+
+Happy Space uses [OpenCV](https://opencv.org/) and
+[NumPy](https://numpy.org/). These projects and their dependencies have their
+own licenses; consult their distribution information for applicable terms.
+
+The included `assets/fishtank.mp4` was obtained royalty-free. Its creator,
+source, and specific license terms have not yet been documented. Verify
+permission to redistribute it; do not assume the project's MIT License
+applies to the video.
