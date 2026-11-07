@@ -1,0 +1,170 @@
+import unittest
+from pathlib import Path
+from unittest.mock import Mock, call, patch
+
+import main
+from src.controller import DisplayController
+from src.detector import CommercialDetector
+from src.player import CalmingVideoPlayer
+
+
+class DetectorTests(unittest.TestCase):
+    @patch("src.detector.time.monotonic")
+    def test_demo_timing_is_independent_of_frame_count(self, clock):
+        clock.return_value = 100
+        detector = CommercialDetector()
+        for now, expected in [
+            (100, (False, None)),
+            (109.99, (False, None)),
+            (110, (True, 5)),
+            (114.9, (True, 1)),
+            (115, (False, None)),
+        ]:
+            with self.subTest(now=now):
+                clock.return_value = now
+                self.assertEqual(detector.analyze_frame(None), expected)
+
+
+class ControllerTests(unittest.TestCase):
+    def setUp(self):
+        self.detector = Mock()
+        self.controller = DisplayController(self.detector)
+
+    def test_manual_toggle_has_no_countdown(self):
+        self.assertEqual(self.controller.selection(None), (False, None))
+        self.controller.handle_key(ord("m"))
+        self.assertEqual(self.controller.selection(None), (True, None))
+        self.controller.handle_key(ord("m"))
+        self.assertEqual(self.controller.selection(None), (False, None))
+        self.detector.analyze_frame.assert_not_called()
+
+    def test_demo_can_be_enabled_disabled_and_overridden(self):
+        self.detector.analyze_frame.return_value = (True, 3)
+        self.controller.handle_key(ord("d"))
+        self.detector.reset.assert_called_once()
+        self.assertEqual(self.controller.selection("frame"), (True, 3))
+        self.controller.handle_key(ord("m"))
+        self.assertEqual(self.controller.selection(None), (False, None))
+        self.assertFalse(self.controller.demo_enabled)
+        self.controller.handle_key(ord("d"))
+        self.controller.handle_key(ord("d"))
+        self.assertEqual(self.controller.selection(None), (False, None))
+
+
+class PlayerTests(unittest.TestCase):
+    @patch("src.player.cv2.VideoCapture")
+    def test_loops_and_releases_video(self, video_capture):
+        capture = video_capture.return_value
+        capture.isOpened.return_value = True
+        capture.read.side_effect = [(False, None), (True, "frame")]
+        player = CalmingVideoPlayer("video.mp4")
+        self.assertEqual(player.get_frame(None), "frame")
+        capture.set.assert_called_once()
+        player.release()
+        capture.release.assert_called_once()
+
+    @patch("src.player.cv2.VideoCapture")
+    def test_unreadable_video_raises_instead_of_showing_placeholder(self, video_capture):
+        capture = video_capture.return_value
+        capture.isOpened.return_value = True
+        capture.read.return_value = (False, None)
+        player = CalmingVideoPlayer("video.mp4")
+        with self.assertRaisesRegex(RuntimeError, "Could not read calming video"):
+            player.get_frame(None)
+
+    @patch("src.player.cv2.VideoCapture")
+    def test_reopens_when_seeking_after_end_of_file_fails(self, video_capture):
+        first, reopened = Mock(), Mock()
+        first.isOpened.return_value = reopened.isOpened.return_value = True
+        first.read.return_value = (False, None)
+        reopened.read.return_value = (True, "frame")
+        video_capture.side_effect = [first, reopened]
+        player = CalmingVideoPlayer("video.mp4")
+        self.assertEqual(player.get_frame(None), "frame")
+        first.release.assert_called_once()
+        player.release()
+        reopened.release.assert_called_once()
+
+    @patch("src.player.cv2.VideoCapture")
+    def test_open_failure_releases_handle(self, video_capture):
+        capture = video_capture.return_value
+        capture.isOpened.return_value = False
+        with self.assertRaisesRegex(RuntimeError, "Could not open calming video"):
+            CalmingVideoPlayer("missing.mp4")
+        capture.release.assert_called_once()
+
+
+class ApplicationTests(unittest.TestCase):
+    @patch("main.cv2.destroyAllWindows")
+    @patch("main.cv2.waitKey", side_effect=[ord("m"), ord("m"), ord("q")])
+    @patch("main.cv2.imshow")
+    @patch("main.cv2.setWindowProperty")
+    @patch("main.cv2.namedWindow")
+    @patch("main.CalmingVideoPlayer")
+    @patch("main.VideoCapture")
+    @patch("main.load_config")
+    def test_manual_switching_and_cleanup(
+        self, load_config, capture_type, player_type, named_window,
+        set_window_property, imshow, wait_key, destroy_windows,
+    ):
+        load_config.return_value = {
+            "capture_device_id": 0,
+            "calming_video_path": "assets/video.mp4",
+        }
+        capture = capture_type.return_value
+        capture.read_frame.return_value = (True, "live")
+        player = player_type.return_value
+        player.get_frame.return_value = "calm"
+
+        main.run(Path("/project/config.json"))
+
+        player_type.assert_called_once_with(
+            Path("/project/assets/video.mp4"), 1.0, [255, 255, 255]
+        )
+        self.assertEqual(
+            imshow.call_args_list,
+            [call("Happy Space", "live"), call("Happy Space", "calm"),
+             call("Happy Space", "live")],
+        )
+        player.get_frame.assert_called_once_with(None)
+        player.reset.assert_called_once()
+        capture.release.assert_called_once()
+        player.release.assert_called_once()
+        destroy_windows.assert_called_once()
+
+    @patch("main.cv2.destroyAllWindows")
+    @patch("main.CalmingVideoPlayer", side_effect=RuntimeError("bad video"))
+    @patch("main.VideoCapture")
+    @patch("main.load_config", return_value={
+        "capture_device_id": 0, "calming_video_path": "missing.mp4"
+    })
+    def test_capture_is_released_when_player_initialization_fails(
+        self, load_config, capture_type, player_type, destroy_windows
+    ):
+        with self.assertRaisesRegex(RuntimeError, "bad video"):
+            main.run(Path("/project/config.json"))
+        capture_type.return_value.release.assert_called_once()
+        destroy_windows.assert_called_once()
+
+    @patch("main.cv2.destroyAllWindows")
+    @patch("main.cv2.setWindowProperty")
+    @patch("main.cv2.namedWindow")
+    @patch("main.CalmingVideoPlayer")
+    @patch("main.VideoCapture")
+    @patch("main.load_config", return_value={
+        "capture_device_id": 0, "calming_video_path": "video.mp4"
+    })
+    def test_capture_read_failure_releases_resources(
+        self, load_config, capture_type, player_type, named_window,
+        set_window_property, destroy_windows,
+    ):
+        capture_type.return_value.read_frame.return_value = (False, None)
+        with self.assertRaisesRegex(RuntimeError, "Could not read from the capture"):
+            main.run(Path("/project/config.json"))
+        capture_type.return_value.release.assert_called_once()
+        player_type.return_value.release.assert_called_once()
+        destroy_windows.assert_called_once()
+
+
+if __name__ == "__main__":
+    unittest.main()
