@@ -1,12 +1,34 @@
 # <span style="color:#E0B659">Happy Space</span>
 
-![Happy Space logo: a gold television with a Zen circle](assets/happy-space-logo.png)
+<img src="assets/happy-space-logo.png" alt="Happy Space logo: a gold television with a Zen circle" width="300">
 
 Happy Space is an early prototype for giving viewers a choice during commercial
 breaks: keep watching the original video or temporarily replace it with a
 calming loop such as a fish tank, fireplace, or ocean. The long-term goal is to
 detect breaks automatically and, when reliable information is available, show
 the remaining time.
+---
+
+## <span style="color:#E0B659">Contents</span>
+
+- [What works today](#what-works-today)
+- [Hardware overview](#hardware-overview)
+  - [Raspberry Pi requirements](#raspberry-pi-requirements)
+  - [HDMI capture device requirements](#hdmi-capture-device-requirements)
+    - [Devices to consider](#devices-to-consider)
+- [Current software architecture](#current-software-architecture)
+- [Getting started](#getting-started)
+  - [Controls](#controls)
+  - [Configuration](#configuration)
+- [Phone remote](#phone-remote)
+  - [Test the remote on the same computer](#test-the-remote-on-the-same-computer)
+  - [Start automatically on the Pi](#start-automatically-on-the-pi)
+- [Updating on Raspberry Pi](#updating-on-raspberry-pi)
+- [Future architecture](#future-architecture)
+- [Tests](#tests)
+- [Help Me Help You](#help-me-help-you)
+- [License](#license)
+- [Attribution](#attribution)
 
 ## <span style="color:#E0B659">What works today</span>
 
@@ -24,6 +46,8 @@ video only: it does not capture, switch, mute, or play audio. It does not provid
 an HDMI passthrough when it exits. Playback speed of the calming video currently
 depends on the capture loop, rather than the file's frame rate. Real-time
 performance, latency, and supported capture formats depend on the hardware.
+
+[Back to contents](#contents)
 
 ## <span style="color:#E0B659">Hardware overview</span>
 
@@ -76,6 +100,8 @@ supply and cooling are advisable for continuous video processing.
 The phone remote avoids a keyboard for normal controls, but it does not
 replace the graphical desktop and display used to show video. Automatic
 desktop login and startup are described below.
+
+[Back to contents](#contents)
 
 ### <span style="color:#E0B659">HDMI capture device requirements</span>
 
@@ -134,6 +160,8 @@ permitted source. Confirm the device is accessible, produces the desired
 format, and runs continuously at an acceptable frame rate and latency. Happy
 Space requests 1080p/30 regardless of a device's higher advertised maximum.
 
+[Back to contents](#contents)
+
 ## <span style="color:#E0B659">Current software architecture</span>
 
 ```mermaid
@@ -154,6 +182,8 @@ The capture loop continues reading live frames while the calming video is shown.
 The demo detector uses elapsed time, not visual or audio cues. Manual switching
 does not guess a remaining time. The selection applies only to the displayed
 video; audio is not part of this pipeline.
+
+[Back to contents](#contents)
 
 ## <span style="color:#E0B659">Getting started</span>
 
@@ -202,6 +232,8 @@ The OpenCV window must have keyboard focus.
 | `d` | Turn simulated detection on or off. Enabling starts a fresh live period; disabling returns to live video. |
 | `q` or `Esc` | Quit and release the capture and video devices. |
 
+[Back to contents](#contents)
+
 ### <span style="color:#E0B659">Configuration</span>
 
 | Key | Meaning |
@@ -215,6 +247,8 @@ The program reports capture and video open/read errors and exits rather than
 pretending a failed video is playing. Check device permissions, codec support,
 the configured path, and whether the source is HDCP-protected if startup or
 capture fails.
+
+[Back to contents](#contents)
 
 ## <span style="color:#E0B659">Phone remote</span>
 
@@ -317,6 +351,8 @@ stopped. Check the terminal for startup or capture errors; the remote shuts
 down if the app exits. If the terminal reports **address already in use**,
 choose another free port with `--web-port` and use that port in the URL.
 
+[Back to contents](#contents)
+
 ### <span style="color:#E0B659">Start automatically on the Pi</span>
 
 The desktop's autostart facility can launch Happy Space when the Pi user logs
@@ -355,6 +391,8 @@ device must be connected. This is not a headless system service.
    run the manual command above in a desktop terminal to see the error.
    The desktop entry's icon may appear in the desktop's launcher or task switcher,
    depending on the desktop environment; OpenCV controls the video window.
+
+[Back to contents](#contents)
 
 ## <span style="color:#E0B659">Updating on Raspberry Pi</span>
 
@@ -406,6 +444,8 @@ virtual environment). Keep the copy in the project directory so its relative
 video path still points to `assets/fishtank.mp4`. Do not rerun the copy command
 if it would overwrite settings you want to keep.
 
+[Back to contents](#contents)
+
 ## <span style="color:#E0B659">Future architecture</span>
 
 The following is a direction for future work, **not an implementation claim**:
@@ -432,6 +472,8 @@ not reliably identify commercials or predict their duration. Real-world
 validation should measure false positives, missed breaks, switching delay, and
 end-to-end latency across representative sources.
 
+[Back to contents](#contents)
+
 ## <span style="color:#E0B659">Tests</span>
 
 With the runtime dependencies installed, run:
@@ -445,7 +487,11 @@ python3 -m unittest discover -s tests -v
 The tests use mocked devices; they do not validate actual capture hardware,
 HDMI compatibility, or on-screen rendering.
 
+[Back to contents](#contents)
+
 ## <span style="color:#E0B659">Help Me Help You</span>
+
+Happy Space is an early-stage project, and there’s still a lot to explore—from improving break detection to testing different capture hardware. If you find it useful or simply like the idea, you can support its development with a coffee. Feedback, ideas, and reports of what works (or doesn’t) on your setup are just as appreciated. Thank you for helping Happy Space grow!
 
 <a href="https://www.buymeacoffee.com/bryanspms" target="_blank">
   <img src= "assets/BuyMeAcoffee-qrCode.png" alt="Buy Me A Coffee" width="180">
@@ -455,10 +501,14 @@ HDMI compatibility, or on-screen rendering.
   <img src= "assets/BuyMeAcoffee.gif" alt="Buy Me A Coffee" width="180">
 </a>
 
+[Back to contents](#contents)
+
 ## <span style="color:#E0B659">License</span>
 
 Happy Space is licensed under the [MIT License](LICENSE). Copyright (c) 2026
 Bryan Price. See the license file for the full terms.
+
+[Back to contents](#contents)
 
 ## <span style="color:#E0B659">Attribution</span>
 
@@ -478,3 +528,5 @@ by IslandHopper X on Pexels and compressed for this project. Consult the
 [Pexels License](https://www.pexels.com/license/) and verify that your intended
 use and redistribution comply with its terms; the project's MIT License does
 not grant rights to these videos.
+
+[Back to contents](#contents)
