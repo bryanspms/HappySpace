@@ -446,11 +446,13 @@ The tests use mocked devices; they do not validate actual capture hardware,
 HDMI compatibility, or on-screen rendering.
 
 ## <span style="color:#E0B659">Help Me Help You</span>
-<a href="https://www.buymeacoffee.com/bryanspms" target="_blank">
-  <img src= "assets/BuyMeAcoffee.gif" alt="Buy Me A Coffee" width="180">
-</a>
+
 <a href="https://www.buymeacoffee.com/bryanspms" target="_blank">
   <img src= "assets/BuyMeAcoffee-qrCode.png" alt="Buy Me A Coffee" width="180">
+</a>
+&nbsp;&nbsp;
+<a href="https://www.buymeacoffee.com/bryanspms" target="_blank">
+  <img src= "assets/BuyMeAcoffee.gif" alt="Buy Me A Coffee" width="180">
 </a>
 
 ## <span style="color:#E0B659">License</span>
