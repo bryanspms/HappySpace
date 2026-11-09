@@ -33,7 +33,7 @@ the remaining time.
 ## <span style="color:#E0B659">Materials</span>
 
 - Raspberry Pi 5 with 8GB RAM
-    https://a.co/d/0iYPqo9N
+    https://a.co/d/0iYPqo9N  ($209.79)
 - Next item
 
 ## <span style="color:#E0B659">What works today</span>
