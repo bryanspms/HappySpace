@@ -494,7 +494,7 @@ HDMI compatibility, or on-screen rendering.
 Happy Space is an early-stage project, and there’s still a lot to explore—from improving break detection to testing different capture hardware. If you find it useful or simply like the idea, you can support its development with a coffee. Feedback, ideas, and reports of what works (or doesn’t) on your setup are just as appreciated. Thank you for helping Happy Space grow!
 
 <a href="https://www.buymeacoffee.com/bryanspms" target="_blank">
-  <img src= "assets/BuyMeAcoffee-qrCode.png" alt="Buy Me A Coffee" width="180">
+  <img src="assets/BuyMeAcoffee-qrCode.png" alt="Buy Me A Coffee" width="180" style="border: 8px ridge #E0B659;">
 </a>
 &nbsp;&nbsp;
 <a href="https://www.buymeacoffee.com/bryanspms" target="_blank">
