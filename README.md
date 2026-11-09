@@ -30,6 +30,12 @@ the remaining time.
 - [License](#license)
 - [Attribution](#attribution)
 
+## <span style="color:#E0B659">Materials</span>
+
+- Raspberry Pi 5 with 8GB RAM
+    https://a.co/d/0iYPqo9N
+- Next item
+
 ## <span style="color:#E0B659">What works today</span>
 
 - Displays video from an OpenCV capture device in a fullscreen window.
