@@ -244,7 +244,7 @@ The OpenCV window must have keyboard focus.
 
 | Key | Meaning |
 | --- | --- |
-| `capture_device_id` | OpenCV capture device index, typically `0`; select the index corresponding to your capture hardware. |
+| `capture_device_id` | OpenCV capture device index, typically `0`; select the index corresponding to your capture hardware. Set a video file path (relative to `config.json`), such as `"assets/sample_input.mp4"`, to simulate live input with a looping file. |
 | `calming_video_path` | Path to a local video, relative to the config file or absolute. |
 | `timer_font_scale` | OpenCV font scale for the simulated countdown. |
 | `timer_color` | Countdown text color as an OpenCV BGR triplet, for example `[255, 255, 255]` for white. |

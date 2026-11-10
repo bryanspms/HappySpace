@@ -27,7 +27,10 @@ def run(config_path, web_address=None, web_password=None):
     )
     choice, settings_revision = settings.snapshot()
     initial_video = settings.path_for(choice, video_path)
-    capture = VideoCapture(config["capture_device_id"])
+    device_id = config["capture_device_id"]
+    if isinstance(device_id, str):
+        device_id = config_path.parent / device_id
+    capture = VideoCapture(device_id)
     player = None
     remote = None
     try:
