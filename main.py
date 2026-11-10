@@ -84,6 +84,8 @@ def run(config_path, web_address=None, web_password=None):
 
             frame = player.get_frame(remaining) if use_calming_video else live_frame
             cv2.imshow("Happy Space", frame)
+            if remote_state is not None:
+                remote_state.update_frame(frame)
             key = cv2.waitKey(1) & 0xFF
             if key in (ord("q"), 27):
                 break

@@ -7,6 +7,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import cv2
+
 
 PAGE = (Path(__file__).with_name("remote.html")).read_bytes()
 ASSET_DIR = Path(__file__).resolve().parent.parent / "assets"
@@ -15,6 +17,8 @@ IMAGES = {
     "/happy-space-icon.png": (ASSET_DIR / "happy-space-icon.png").read_bytes(),
 }
 COMMANDS = {"live", "calming", "demo-on", "demo-off"}
+PREVIEW_MAX_AGE = 5
+PREVIEW_MAX_WIDTH = 640
 
 
 class RemoteState:
@@ -23,6 +27,8 @@ class RemoteState:
         self.commands = queue.Queue(maxsize=32)
         self.lock = threading.Lock()
         self.status = {"selection": "live", "demo": False, "updated": 0.0}
+        self.frame = None
+        self.frame_updated = 0.0
 
     def update(self, controller):
         with self.lock:
@@ -39,6 +45,17 @@ class RemoteState:
                 "demo": self.status["demo"],
                 "age_seconds": round(time.monotonic() - self.status["updated"], 1),
             }
+
+    def update_frame(self, frame):
+        with self.lock:
+            self.frame = frame
+            self.frame_updated = time.monotonic()
+
+    def preview_frame(self):
+        with self.lock:
+            if self.frame is None or time.monotonic() - self.frame_updated > PREVIEW_MAX_AGE:
+                return None
+            return self.frame.copy()
 
     def apply_commands(self, controller):
         for _ in range(self.commands.maxsize):
@@ -90,7 +107,7 @@ class RemoteHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' blob:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'")
         self.end_headers()
         self.wfile.write(body)
 
@@ -118,6 +135,29 @@ class RemoteHandler(BaseHTTPRequestHandler):
                 self.json_response(401, {"error": "Invalid password"})
                 return
             self.json_response(200, self.server.state.snapshot())
+        elif path == "/api/preview":
+            if not self.authorized():
+                self.json_response(401, {"error": "Invalid password"})
+                return
+            frame = self.server.state.preview_frame()
+            if frame is None:
+                self.json_response(503, {"error": "Preview unavailable or stale"})
+                return
+            try:
+                height, width = frame.shape[:2]
+                if width > PREVIEW_MAX_WIDTH:
+                    frame = cv2.resize(
+                        frame, (PREVIEW_MAX_WIDTH, max(1, round(height * PREVIEW_MAX_WIDTH / width))),
+                        interpolation=cv2.INTER_AREA,
+                    )
+                success, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+            except cv2.error:
+                self.json_response(500, {"error": "Could not encode preview"})
+                return
+            if not success:
+                self.json_response(500, {"error": "Could not encode preview"})
+                return
+            self.respond(200, encoded.tobytes(), "image/jpeg")
         elif path == "/api/settings":
             if not self.authorized():
                 self.json_response(401, {"error": "Invalid password"})

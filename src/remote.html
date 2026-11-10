@@ -17,6 +17,8 @@
     button:disabled { opacity: .5; }
     .controls { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: 1rem; }
     #status { min-height: 3em; }
+    #preview { display: block; max-width: 100%; height: auto; margin-top: .5rem; }
+    #preview[hidden] { display: none; }
   </style>
 </head>
 <body>
@@ -31,6 +33,11 @@
   </form>
   <p id="status" role="status" aria-live="polite">Enter the remote password to connect.</p>
   <div id="remote-view">
+  <section aria-labelledby="preview-title">
+    <h2 id="preview-title">Video preview</h2>
+    <p id="preview-status" role="status">Connect to see the preview.</p>
+    <img id="preview" alt="Latest Happy Space output frame" hidden>
+  </section>
   <div class="controls">
     <button data-command="live" disabled>Live video</button>
     <button data-command="calming" disabled>Calming video</button>
@@ -59,6 +66,11 @@
     const save = document.getElementById("save-settings");
     const choices = document.getElementById("video-choice");
     const settingsStatus = document.getElementById("settings-status");
+    const preview = document.getElementById("preview");
+    const previewStatus = document.getElementById("preview-status");
+    let previewUrl = "";
+    let previewInFlight = false;
+    let previewGeneration = 0;
     let settingsLoaded = false;
     let connected = false;
     let saving = false;
@@ -68,7 +80,7 @@
       setup.disabled = !value;
       save.disabled = !value || !settingsLoaded || saving;
     }
-    async function request(path, options = {}) {
+    async function requestRaw(path, options = {}) {
       const response = await fetch(path, {
         ...options,
         headers: { ...options.headers, Authorization: "Bearer " + password },
@@ -78,22 +90,63 @@
         const detail = await response.json();
         throw new Error(detail.error || "Request failed");
       }
-      return response.json();
+      return response;
+    }
+    async function request(path, options = {}) {
+      return (await requestRaw(path, options)).json();
+    }
+    function clearPreview(message) {
+      previewGeneration++;
+      preview.hidden = true;
+      preview.removeAttribute("src");
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      previewUrl = "";
+      previewStatus.textContent = message;
+    }
+    async function refreshPreview() {
+      if (!connected || previewInFlight || document.hidden) return;
+      previewInFlight = true;
+      const generation = previewGeneration;
+      try {
+        const response = await requestRaw("/api/preview");
+        const image = await response.blob();
+        if (generation !== previewGeneration || !connected) return;
+        const nextUrl = URL.createObjectURL(image);
+        const oldUrl = previewUrl;
+        previewUrl = nextUrl;
+        preview.src = nextUrl;
+        preview.hidden = false;
+        if (oldUrl) URL.revokeObjectURL(oldUrl);
+        previewStatus.textContent = "Refreshing about every 2 seconds.";
+      } catch (error) {
+        if (generation === previewGeneration) {
+          clearPreview(`Preview unavailable: ${error.message}`);
+        }
+      } finally {
+        previewInFlight = false;
+      }
     }
     async function refresh() {
       if (!password) return;
+      const requestPassword = password;
       try {
         const state = await request("/api/status");
+        if (requestPassword !== password) return;
         if (state.age_seconds > 5) throw new Error("App is not updating");
         status.textContent = `Connected: ${state.selection === "live" ? "live video" : "calming video"}; demo ${state.demo ? "on" : "off"}.`;
         enabled(true);
+        refreshPreview();
       } catch (error) {
+        if (requestPassword !== password) return;
         status.textContent = `Disconnected: ${error.message}`;
         enabled(false);
+        clearPreview("Preview unavailable while disconnected.");
       }
     }
     document.getElementById("login").addEventListener("submit", event => {
       event.preventDefault();
+      enabled(false);
+      clearPreview("Connecting to preview…");
       password = document.getElementById("password").value;
       document.getElementById("password").value = "";
       refresh();
@@ -164,6 +217,10 @@
       save.disabled = !connected || !settingsLoaded;
     });
     setInterval(refresh, 2000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) clearPreview("Preview paused while the page is hidden.");
+      else refresh();
+    });
   </script>
 </body>
 </html>

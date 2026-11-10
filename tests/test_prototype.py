@@ -5,6 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, call, patch
 
+import cv2
+import numpy as np
+
 import main
 from src.controller import DisplayController
 from src.detector import CommercialDetector
@@ -140,6 +143,58 @@ class PlayerTests(unittest.TestCase):
 
 
 class ApplicationTests(unittest.TestCase):
+    @patch("main.cv2.destroyAllWindows")
+    @patch("main.cv2.waitKey")
+    @patch("main.cv2.imshow")
+    @patch("main.cv2.setWindowProperty")
+    @patch("main.cv2.namedWindow")
+    @patch("main.CalmingVideoPlayer")
+    @patch("main.VideoCapture")
+    @patch("main.load_config", return_value={
+        "capture_device_id": 0, "calming_video_path": "video.mp4"
+    })
+    def test_preview_follows_displayed_live_and_calming_frames(
+        self, load_config, capture_type, player_type, named_window,
+        set_window_property, imshow, wait_key, destroy_windows,
+    ):
+        live = np.full((20, 30, 3), (20, 40, 60), dtype=np.uint8)
+        calm = np.full((20, 30, 3), (100, 120, 140), dtype=np.uint8)
+        capture_type.return_value.read_frame.return_value = (True, live)
+        player_type.return_value.get_frame.return_value = calm
+        from src.web_remote import WebRemote
+
+        servers = []
+        def make_remote(address, password, state):
+            server = WebRemote(address, password, state)
+            servers.append(server)
+            return server
+
+        def check_preview(expected, key):
+            connection = http.client.HTTPConnection(
+                "127.0.0.1", servers[0].server.server_port, timeout=5
+            )
+            try:
+                connection.request("GET", "/api/preview",
+                                   headers={"Authorization": "Bearer a-strong-password"})
+                response = connection.getresponse()
+                self.assertEqual(response.status, 200)
+                image = cv2.imdecode(np.frombuffer(response.read(), dtype=np.uint8),
+                                     cv2.IMREAD_COLOR)
+                np.testing.assert_allclose(image[0, 0], expected, atol=3)
+            finally:
+                connection.close()
+            return key
+
+        wait_key.side_effect = [
+            lambda: check_preview([20, 40, 60], ord("m")),
+            lambda: check_preview([100, 120, 140], ord("q")),
+        ]
+        actions = wait_key.side_effect
+        wait_key.side_effect = lambda _: next(actions)()
+        with patch("main.WebRemote", side_effect=make_remote):
+            main.run(Path("/project/config.json"), ("127.0.0.1", 0),
+                     "a-strong-password")
+
     @patch("main.cv2.destroyAllWindows")
     @patch("main.cv2.waitKey")
     @patch("main.cv2.imshow")

@@ -3,7 +3,10 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+
+import cv2
+import numpy as np
 
 from src.controller import DisplayController
 from src.settings import VideoSettings
@@ -65,6 +68,43 @@ class WebRemoteTests(unittest.TestCase):
                 self.assertEqual(status, 200)
                 self.assertTrue(image.startswith(b"\x89PNG\r\n\x1a\n"))
         self.assertEqual(self.request("GET", "/assets/fishtank.mp4", password=None)[0], 404)
+
+    def test_preview_requires_password_and_a_current_frame(self):
+        self.assertEqual(self.request("GET", "/api/preview", password=None)[0], 401)
+        self.assertEqual(self.request("GET", "/api/preview", password="wrong")[0], 401)
+        self.assertEqual(self.request("GET", "/api/preview")[0], 503)
+        with patch("src.web_remote.time.monotonic", return_value=100):
+            self.state.update_frame(np.full((720, 1280, 3), (10, 80, 200), dtype=np.uint8))
+            code, data = self.request("GET", "/api/preview")
+        self.assertEqual(code, 200)
+        image = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+        self.assertEqual(image.shape, (360, 640, 3))
+        np.testing.assert_allclose(image[0, 0], [10, 80, 200], atol=3)
+        with patch("src.web_remote.time.monotonic", return_value=106):
+            self.assertEqual(self.request("GET", "/api/preview")[0], 503)
+
+    def test_preview_encoding_failure_is_reported(self):
+        self.state.update_frame(np.zeros((10, 10, 3), dtype=np.uint8))
+        with patch("src.web_remote.cv2.imencode", return_value=(False, None)):
+            code, data = self.request("GET", "/api/preview")
+        self.assertEqual(code, 500)
+        self.assertEqual(json.loads(data)["error"], "Could not encode preview")
+
+    def test_preview_response_headers(self):
+        self.state.update_frame(np.zeros((10, 10, 3), dtype=np.uint8))
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        try:
+            connection.request("GET", "/api/preview",
+                               headers={"Authorization": "Bearer " + PASSWORD})
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.getheader("Content-Type"), "image/jpeg")
+            self.assertEqual(response.getheader("Cache-Control"), "no-store")
+            self.assertIn("img-src 'self' blob:",
+                          response.getheader("Content-Security-Policy"))
+            response.read()
+        finally:
+            connection.close()
 
     def test_commands_update_controller_and_status(self):
         for command, selection, demo in [

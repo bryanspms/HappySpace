@@ -265,8 +265,8 @@ and a TV or display for the video, but a phone can replace the keyboard for
 switching modes.
 
 1. Connect the Pi and phone to the same **trusted** local network. HTTP does
-   not encrypt the password or commands. Anyone able to observe network
-   traffic could obtain the password. Do not expose the port to the internet,
+   not encrypt the password, commands, or preview images. Anyone able to
+   observe network traffic could obtain them. Do not expose the port to the internet,
    configure router port forwarding, or use this on an untrusted network.
    The password does not prevent guessing attempts; choose a strong, unique
    password and restrict network access with your firewall if appropriate.
@@ -296,8 +296,13 @@ switching modes.
    phone, open `http://PI_ADDRESS:8080/`, substituting that address, and enter
    the password. Use the buttons to choose live video or the calming video, or
    turn the **simulated** demo on or off. Manual selection turns demo mode off.
-   The page reports the current selection, demo mode, and connection status;
-   it does not stream video to the phone.
+   The page reports the current selection, demo mode, and connection status.
+   After connecting, the password-protected **Video preview** refreshes about
+   every two seconds while the page is visible. It shows a reduced-size image
+   of the frame sent to the Happy Space window, including any countdown, not a
+   screenshot of the physical display. It cannot verify the monitor, HDMI
+   connection, or desktop itself. If the preview is unavailable or the app
+   stops updating, the page reports this instead of retaining an old image.
 
 Select **Setup** on the remote to choose an MP4 file from the project's
 `assets` folder, or choose **Random video**, then select **Save settings**.
