@@ -34,10 +34,14 @@ the remaining time.
 
 ## <span style="color:#E0B659">Materials</span>
 
-- Raspberry Pi 5 with 8GB RAM
-    https://a.co/d/0iYPqo9N  ($209.79)
-- Video Capture Card
-    https://a.co/d/00CWJ8EB  ($30.00)
+| Material Name | Link to Item | Cost |
+| --- | --- | ---: |
+| Raspberry Pi 5 with 8GB RAM | [View item](https://a.co/d/0iYPqo9N) | $209.79 |
+| Video Capture Card | [View item](https://a.co/d/00CWJ8EB) | $30.00 |
+| USB Speakers | [View item](https://a.co/d/0bKFKzn3) | $13.99 |
+| **Grand total** | | **$253.78** |
+
+  - Cost was done at time of writing.  Please use these figures as a guideline only.
 
 [Back to contents](#contents)
 
@@ -77,12 +81,18 @@ A Raspberry Pi's HDMI ports are outputs, not inputs. One possible setup is:
 ```mermaid
 flowchart LR
     source["Video source<br/>(e.g., cable box)"] -->|HDMI| capture["HDMI capture device"]
-    capture -->|USB 3.0 video| pi["Raspberry Pi 4/5<br/>Happy Space"]
-    pi -->|HDMI video| tv["TV or display"]
+    capture -->|USB video| pi["Raspberry Pi 4/5<br/>Happy Space"]
+    sample["Optional sample video file<br/>instead of capture device"] --> pi
     assets["Local calming video"] --> pi
+    pi -->|HDMI video| tv["TV or display"]
+    phone["Phone or computer<br/>optional web remote"] -->|Controls over local network| pi
+    pi -->|Status and preview| phone
 ```
 
 You need a compatible USB HDMI capture device, a display, and suitable cables.
+The capture device can be replaced by a local sample video for testing.
+USB or Bluetooth speakers may be connected to the Pi, but Happy Space does not
+currently route or mute audio.
 The capture device and Pi must support the source resolution and frame rate;
 1080p/30 is requested, but the device may negotiate something different. The
 prototype needs a graphical desktop session for its OpenCV window.
@@ -187,16 +197,22 @@ Space requests 1080p/30 regardless of a device's higher advertised maximum.
 
 ```mermaid
 flowchart LR
-    input["Capture device"] --> capture["VideoCapture"]
-    capture --> live["Live frames"]
-    live --> controller["Display controller"]
-    live --> demo["Simulated detector<br/>(opt-in)"]
-    demo -->|simulated state and countdown| controller
+    input["Capture device or<br/>looping sample video"] --> capture["VideoCapture"]
+    capture -->|Live frames| selection["Frame selection"]
+    capture -->|Frames| controller["Display controller"]
+    demo["Simulated detector<br/>(opt-in)"] -->|State and countdown| controller
     keys["Keyboard controls"] --> controller
-    phone["Optional web remote"] --> controller
-    asset["Local video file"] --> player["Looping video player"]
-    controller -->|select live or calming frame| display["Fullscreen OpenCV window"]
-    player --> display
+    phone["Phone or computer"] -->|Commands| remote["Optional web remote"]
+    remote -->|Commands| controller
+    phone -->|Video choice| settings["Video settings"]
+    settings -->|Fixed or random choice| player["Calming video player"]
+    asset["Local calming videos"] --> player
+    controller -->|Selection and countdown| selection
+    player -->|Calming frames| selection
+    selection -->|Selected frame| display["Fullscreen OpenCV window"]
+    selection -->|Selected frame| remote
+    controller -->|Status| remote
+    remote -->|Status and preview| phone
 ```
 
 The capture loop continues reading live frames while the calming video is shown.
@@ -481,11 +497,12 @@ flowchart LR
     source["Permitted live source"] --> capture["Video / audio capture"]
     capture --> features["Signal features /<br/>optional program metadata"]
     features --> detection["Break detector<br/>confidence + state"]
-    capture --> switcher["A/V switcher"]
+    capture --> switcher["Video and audio switcher"]
     detection --> policy["Viewer preference +<br/>manual override"]
-    policy --> switcher
-    loops["Calming video + audio"] --> switcher
-    switcher --> output["Synchronized display / audio"]
+    manual["Manual controls"] --> policy
+    policy -->|Select video and mute live audio| switcher
+    loops["Calming video<br/>optional audio"] --> switcher
+    switcher --> output["Display and audio output"]
     detection -->|only if known| timer["Optional countdown"]
     timer --> output
 ```
