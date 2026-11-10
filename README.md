@@ -11,7 +11,9 @@ the remaining time.
 
 ## <span style="color:#E0B659">Contents</span>
 
+- [Materials](#materials)
 - [What works today](#what-works-today)
+- [Screen Shots](#screen-shots)
 - [Hardware overview](#hardware-overview)
   - [Raspberry Pi requirements](#raspberry-pi-requirements)
   - [HDMI capture device requirements](#hdmi-capture-device-requirements)
@@ -34,7 +36,10 @@ the remaining time.
 
 - Raspberry Pi 5 with 8GB RAM
     https://a.co/d/0iYPqo9N  ($209.79)
-- Next item
+- Video Capture Card
+    https://a.co/d/00CWJ8EB  ($30.00)
+
+[Back to contents](#contents)
 
 ## <span style="color:#E0B659">What works today</span>
 
@@ -52,6 +57,16 @@ video only: it does not capture, switch, mute, or play audio. It does not provid
 an HDMI passthrough when it exits. Playback speed of the calming video currently
 depends on the capture loop, rather than the file's frame rate. Real-time
 performance, latency, and supported capture formats depend on the hardware.
+
+[Back to contents](#contents)
+
+## <span style="color:#E0B659">Screen Shots</span>
+
+- Happy Space Remote
+<img src="assets/HappySpace-Remote.png" alt="Happy Space Remote Screen Shot">
+
+- Happy Space Remote Setup
+<img src="assets/HappySpace-Remote-Setup.png" alt="Happy Space Remote Setup Screen Shot">
 
 [Back to contents](#contents)
 
