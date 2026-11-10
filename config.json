@@ -1,5 +1,6 @@
 {
-    "capture_device_id": 0,
+    "_capture_device_id": 0,
+    "capture_device_id": "assets/sample_input.mp4",
     "calming_video_path": "assets/fireplace.mp4",
     "timer_font_scale": 1.0,
     "timer_color": [255, 255, 255]
