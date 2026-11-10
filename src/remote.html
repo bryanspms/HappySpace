@@ -16,6 +16,8 @@
     button { border: 0; border-radius: .4rem; background: #176466; color: white; cursor: pointer; }
     button:disabled { opacity: .5; }
     .controls { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: 1rem; }
+    .timed-controls { display: flex; align-items: center; gap: .6rem; }
+    .timed-controls select { flex: 1; min-width: 0; }
     #status { min-height: 3em; }
     #preview { display: block; max-width: 100%; height: auto; margin-top: .5rem; }
     #preview[hidden] { display: none; }
@@ -44,6 +46,18 @@
     <button data-command="demo-on" disabled>Demo on</button>
     <button data-command="demo-off" disabled>Demo off</button>
   </div>
+  <form id="timed-form">
+    <label for="duration">Duration in seconds</label>
+    <div class="timed-controls">
+      <select id="duration" disabled>
+        <option value="30">30</option>
+        <option value="60">60</option>
+        <option value="90">90</option>
+        <option value="120">120</option>
+      </select>
+      <button id="timed-play" type="submit" disabled>Play for selected seconds</button>
+    </div>
+  </form>
   <p>Demo mode simulates breaks; it does not detect commercials.</p>
   <button id="open-settings" disabled>Setup</button>
   </div>
@@ -66,6 +80,8 @@
     const save = document.getElementById("save-settings");
     const choices = document.getElementById("video-choice");
     const settingsStatus = document.getElementById("settings-status");
+    const duration = document.getElementById("duration");
+    const timedPlay = document.getElementById("timed-play");
     const preview = document.getElementById("preview");
     const previewStatus = document.getElementById("preview-status");
     let previewUrl = "";
@@ -78,6 +94,8 @@
       connected = value;
       buttons.forEach(button => button.disabled = !value);
       setup.disabled = !value;
+      duration.disabled = !value;
+      timedPlay.disabled = !value;
       save.disabled = !value || !settingsLoaded || saving;
     }
     async function requestRaw(path, options = {}) {
@@ -151,20 +169,27 @@
       document.getElementById("password").value = "";
       refresh();
     });
-    buttons.forEach(button => button.addEventListener("click", async () => {
+    async function sendCommand(command) {
       enabled(false);
       try {
         await request("/api/command", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ command: button.dataset.command })
+          body: JSON.stringify(command)
         });
         status.textContent = "Command sent; waiting for the app.";
       } catch (error) {
         status.textContent = `Command failed: ${error.message}`;
       }
       setTimeout(refresh, 300);
+    }
+    buttons.forEach(button => button.addEventListener("click", () => {
+      sendCommand({ command: button.dataset.command });
     }));
+    document.getElementById("timed-form").addEventListener("submit", event => {
+      event.preventDefault();
+      sendCommand({ command: "timed", seconds: Number(duration.value) });
+    });
     setup.addEventListener("click", async () => {
       document.getElementById("remote-view").hidden = true;
       document.getElementById("settings-view").hidden = false;

@@ -68,6 +68,42 @@ class ControllerTests(unittest.TestCase):
         self.controller.set_demo(False)
         self.assertEqual(self.controller.selection(None), (True, None))
 
+    @patch("src.controller.time.monotonic")
+    def test_timed_playback_duration_and_expiration(self, clock):
+        for duration in (30, 60, 90, 120):
+            with self.subTest(duration=duration):
+                clock.return_value = 100
+                self.controller.set_demo(True)
+                self.controller.select_timed(duration)
+                self.assertFalse(self.controller.demo_enabled)
+                self.assertEqual(self.controller.selection(None), (True, duration))
+                clock.return_value = 100 + duration - 0.1
+                self.assertEqual(self.controller.selection(None), (True, 1))
+                clock.return_value = 100 + duration
+                self.assertEqual(self.controller.selection(None), (False, None))
+                self.assertFalse(self.controller.is_commercial)
+
+    @patch("src.controller.time.monotonic")
+    def test_timed_playback_restarts_and_manual_controls_override(self, clock):
+        clock.return_value = 100
+        self.controller.select_timed(30)
+        clock.return_value = 120
+        self.controller.select_timed(60)
+        self.assertEqual(self.controller.selection(None), (True, 60))
+        clock.return_value = 131
+        self.assertEqual(self.controller.selection(None), (True, 49))
+        self.controller.select_manual(True)
+        self.assertEqual(self.controller.selection(None), (True, None))
+        clock.return_value = 200
+        self.assertEqual(self.controller.selection(None), (True, None))
+        self.controller.select_timed(30)
+        self.controller.handle_key(ord("m"))
+        self.assertEqual(self.controller.selection(None), (False, None))
+        self.controller.select_timed(30)
+        self.controller.handle_key(ord("d"))
+        self.assertTrue(self.controller.demo_enabled)
+        self.assertIsNone(self.controller.timed_until)
+
 
 class PlayerTests(unittest.TestCase):
     @patch("src.player.cv2.VideoCapture")
@@ -143,6 +179,65 @@ class PlayerTests(unittest.TestCase):
 
 
 class ApplicationTests(unittest.TestCase):
+    @patch("src.controller.time.monotonic")
+    @patch("main.cv2.destroyAllWindows")
+    @patch("main.cv2.waitKey")
+    @patch("main.cv2.imshow")
+    @patch("main.cv2.setWindowProperty")
+    @patch("main.cv2.namedWindow")
+    @patch("main.CalmingVideoPlayer")
+    @patch("main.VideoCapture")
+    @patch("main.load_config", return_value={
+        "capture_device_id": 0, "calming_video_path": "video.mp4"
+    })
+    def test_timed_web_command_shows_countdown_then_returns_to_live(
+        self, load_config, capture_type, player_type, named_window,
+        set_window_property, imshow, wait_key, destroy_windows, clock,
+    ):
+        capture_type.return_value.read_frame.return_value = (True, "live")
+        player_type.return_value.get_frame.return_value = "calm"
+        from src.web_remote import WebRemote
+        servers = []
+
+        def make_remote(address, password, state):
+            server = WebRemote(address, password, state)
+            servers.append(server)
+            return server
+
+        def send_timed():
+            connection = http.client.HTTPConnection(
+                "127.0.0.1", servers[0].server.server_port, timeout=5
+            )
+            try:
+                connection.request("POST", "/api/command",
+                                   json.dumps({"command": "timed", "seconds": 30}),
+                                   {"Authorization": "Bearer a-strong-password",
+                                    "Content-Type": "application/json"})
+                response = connection.getresponse()
+                self.assertEqual(response.status, 202)
+                response.read()
+            finally:
+                connection.close()
+            return -1
+
+        def advance(now, key):
+            clock.return_value = now
+            return key
+
+        clock.return_value = 100
+        actions = iter([send_timed, lambda: advance(129.9, -1),
+                        lambda: advance(130, -1), lambda: ord("q")])
+        wait_key.side_effect = lambda _: next(actions)()
+        with patch("main.WebRemote", side_effect=make_remote):
+            main.run(Path("/project/config.json"), ("127.0.0.1", 0),
+                     "a-strong-password")
+        self.assertEqual(imshow.call_args_list, [
+            call("Happy Space", "live"), call("Happy Space", "calm"),
+            call("Happy Space", "calm"), call("Happy Space", "live"),
+        ])
+        self.assertEqual(player_type.return_value.get_frame.call_args_list,
+                         [call(30), call(1)])
+
     @patch("main.cv2.destroyAllWindows")
     @patch("main.cv2.waitKey")
     @patch("main.cv2.imshow")

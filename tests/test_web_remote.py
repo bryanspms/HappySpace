@@ -128,6 +128,27 @@ class WebRemoteTests(unittest.TestCase):
                 self.assertEqual(state["demo"], demo)
                 self.assertLess(state["age_seconds"], 5)
 
+    def test_timed_commands_validate_and_update_controller(self):
+        body = json.dumps({"command": "timed", "seconds": 30})
+        self.assertEqual(self.request("POST", "/api/command", body, password=None)[0], 401)
+        self.assertTrue(self.state.commands.empty())
+        for seconds in (None, 0, 29, 31, 121, -30, True, 30.0, "30", [], {}):
+            with self.subTest(seconds=seconds):
+                body = json.dumps({"command": "timed", "seconds": seconds})
+                self.assertEqual(self.request("POST", "/api/command", body)[0], 400)
+                self.assertTrue(self.state.commands.empty())
+        for seconds in (30, 60, 90, 120):
+            with self.subTest(seconds=seconds):
+                body = json.dumps({"command": "timed", "seconds": seconds})
+                self.assertEqual(self.request("POST", "/api/command", body)[0], 202)
+                with patch("src.controller.time.monotonic", return_value=100):
+                    self.state.apply_commands(self.controller)
+                    self.assertEqual(self.controller.selection(None), (True, seconds))
+                self.state.update(self.controller)
+                status, result = self.request("GET", "/api/status")
+                self.assertEqual(status, 200)
+                self.assertEqual(json.loads(result)["selection"], "calming")
+
     def test_bad_requests_and_full_queue_are_reported(self):
         for body in ['bad json', '{}', '{"command":[]}', '{"command":"quit"}']:
             with self.subTest(body=body):

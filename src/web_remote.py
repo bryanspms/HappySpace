@@ -17,6 +17,7 @@ IMAGES = {
     "/happy-space-icon.png": (ASSET_DIR / "happy-space-icon.png").read_bytes(),
 }
 COMMANDS = {"live", "calming", "demo-on", "demo-off"}
+TIMED_DURATIONS = {30, 60, 90, 120}
 PREVIEW_MAX_AGE = 5
 PREVIEW_MAX_WIDTH = 640
 
@@ -71,6 +72,8 @@ class RemoteState:
                 controller.set_demo(True)
             elif command == "demo-off":
                 controller.set_demo(False)
+            elif isinstance(command, tuple) and command[0] == "timed":
+                controller.select_timed(command[1])
 
 
 def read_password(path):
@@ -216,12 +219,23 @@ class RemoteHandler(BaseHTTPRequestHandler):
         if length > 256:
             self.json_response(400, {"error": "Invalid content length"})
             return
-        if (not isinstance(data, dict) or not isinstance(data.get("command"), str)
-                or data["command"] not in COMMANDS):
+        if not isinstance(data, dict) or not isinstance(data.get("command"), str):
             self.json_response(400, {"error": "Invalid command"})
             return
+        command = data["command"]
+        if command == "timed":
+            seconds = data.get("seconds")
+            if type(seconds) is not int or seconds not in TIMED_DURATIONS:
+                self.json_response(400, {"error": "Invalid duration"})
+                return
+            queued_command = ("timed", seconds)
+        elif command not in COMMANDS:
+            self.json_response(400, {"error": "Invalid command"})
+            return
+        else:
+            queued_command = command
         try:
-            self.server.state.commands.put_nowait(data["command"])
+            self.server.state.commands.put_nowait(queued_command)
         except queue.Full:
             self.json_response(503, {"error": "Command queue is full"})
             return

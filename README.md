@@ -49,7 +49,8 @@ the remaining time.
 
 - Displays video from an OpenCV capture device in a fullscreen window.
 - Lets the viewer manually switch between the live picture and a looping local
-  video; the live picture is selected at startup.
+  video, or use the remote to play a calming video for a selected duration;
+  the live picture is selected at startup.
 - Offers an **opt-in simulated detector** for testing: 10 seconds of live video,
   followed by a 5-second simulated break, repeating. Its countdown is based on
   that simulation, not on the input signal.
@@ -277,7 +278,7 @@ The OpenCV window must have keyboard focus.
 | --- | --- |
 | `capture_device_id` | OpenCV capture device index, typically `0`; select the index corresponding to your capture hardware. Set a video file path (relative to `config.json`), such as `"assets/sample_input.mp4"`, to simulate live input with a looping file. |
 | `calming_video_path` | Path to a local video, relative to the config file or absolute. |
-| `timer_font_scale` | OpenCV font scale for the simulated countdown. |
+| `timer_font_scale` | OpenCV font scale for the countdown. |
 | `timer_color` | Countdown text color as an OpenCV BGR triplet, for example `[255, 255, 255]` for white. |
 
 The program reports capture and video open/read errors and exits rather than
@@ -334,6 +335,19 @@ switching modes.
    screenshot of the physical display. It cannot verify the monitor, HDMI
    connection, or desktop itself. If the preview is unavailable or the app
    stops updating, the page reports this instead of retaining an old image.
+
+To play a calming video temporarily, choose **30, 60, 90, or 120** under
+**Duration in seconds**, then select **Play for selected seconds**. The
+currently configured fixed or random video selection plays until the time
+expires, with a countdown on the video, then the app returns to live video.
+Fixed videos loop and random mode selects another video at each ending as
+usual. The duration is measured from when the app processes the command and
+the transition happens on the next available frame.
+
+Timed playback turns off demo mode. Starting it again restarts the countdown
+from the newly selected duration. **Live video**, **Calming video**, or
+enabling demo mode cancels the timer; **Calming video** continues without a
+timer. The keyboard's `m` and `d` controls likewise override timed playback.
 
 Select **Setup** on the remote to choose an MP4 file from the project's
 `assets` folder, or choose **Random video**, then select **Save settings**.
