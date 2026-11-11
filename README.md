@@ -39,7 +39,8 @@ the remaining time.
 | Raspberry Pi 5 with 8GB RAM | [View item](https://a.co/d/0iYPqo9N) | $209.79 |
 | Video Capture Card | [View item](https://a.co/d/00CWJ8EB) | $30.00 |
 | USB Speakers | [View item](https://a.co/d/0bKFKzn3) | $13.99 |
-| **Grand total** | | **$253.78** |
+| USB to USB Adapters | [View item](https://www.amazon.com/dp/B0FQTC76CX?ref=ppx_yo2ov_dt_b_fed_asin_title&th=1) | $9.99 |
+| **Grand total** | | **$263.77** |
 
   - Cost was done at time of writing.  Please use these figures as a guideline only.
 
