@@ -199,13 +199,13 @@
       try {
         const settings = await request("/api/settings");
         choices.replaceChildren();
-        if (settings.video.mode === "default") {
-          choices.add(new Option("Current config file video", "default", true, true));
+        if (settings.video.mode === "default" && settings.default_video !== null) {
+          choices.add(new Option(`Config video: ${settings.default_video}`, "default", true, true));
           choices.options[0].disabled = true;
         }
         choices.add(new Option("Random video", "random"));
         settings.videos.forEach(name => choices.add(new Option(name, "file:" + name)));
-        if (settings.video.mode === "random") choices.value = "random";
+        if ((settings.video.mode === "default" && settings.default_video === null) || settings.video.mode === "random") choices.value = "random";
         if (settings.video.mode === "file") choices.value = "file:" + settings.video.file;
         settingsLoaded = true;
         save.disabled = !connected || saving;

@@ -21,12 +21,16 @@ def load_config(path):
 def run(config_path, web_address=None, web_password=None):
     config = load_config(config_path)
     video_path = config_path.parent / config["calming_video_path"]
+    default_video = None
+    if not video_path.is_dir() and video_path.suffix.lower() == ".mp4":
+        default_video, video_path = video_path, video_path.parent
     settings = VideoSettings(
-        Path(__file__).resolve().parent / "assets",
+        video_path,
         config_path.parent / ".happyspace-settings" / config_path.name,
+        default_video,
     )
     choice, settings_revision = settings.snapshot()
-    initial_video = settings.path_for(choice, video_path)
+    initial_video = settings.path_for(choice)
     device_id = config["capture_device_id"]
     if isinstance(device_id, str):
         device_id = config_path.parent / device_id
@@ -39,8 +43,9 @@ def run(config_path, web_address=None, web_password=None):
             config.get("timer_font_scale", 1.0),
             config.get("timer_color", [255, 255, 255]),
         )
-        if choice["mode"] == "random":
-            player.next_video = lambda: settings.path_for(settings.snapshot()[0], video_path)
+        player.next_video = (
+            lambda: settings.path_for(settings.snapshot()[0])
+        ) if settings.is_random(choice) else None
         controller = DisplayController(CommercialDetector())
 
         cv2.namedWindow("Happy Space", cv2.WND_PROP_FULLSCREEN)
@@ -66,17 +71,20 @@ def run(config_path, web_address=None, web_password=None):
                 remote_state.apply_commands(controller)
             choice, revision = settings.snapshot()
             if revision != settings_revision:
-                player.switch(settings.path_for(choice, video_path))
+                player.switch(settings.path_for(choice))
                 player.next_video = (
-                    lambda: settings.path_for(settings.snapshot()[0], video_path)
-                ) if choice["mode"] == "random" else None
+                    lambda: settings.path_for(settings.snapshot()[0])
+                ) if settings.is_random(choice) else None
                 settings_revision = revision
             use_calming_video, remaining = controller.selection(live_frame)
             if remote_state is not None:
                 remote_state.update(controller)
             if use_calming_video != previous_selection:
                 if use_calming_video:
-                    player.reset()
+                    if settings.is_random(choice):
+                        player.switch(settings.path_for(choice))
+                    else:
+                        player.reset()
                     print("Switching to calming video.")
                 else:
                     print("Returning to live video.")

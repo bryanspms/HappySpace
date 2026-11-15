@@ -171,7 +171,13 @@ class RemoteHandler(BaseHTTPRequestHandler):
                 return
             try:
                 choice, _ = settings.snapshot()
-                self.json_response(200, {"video": choice, "videos": settings.videos()})
+                self.json_response(200, {
+                    "video": choice,
+                    "videos": settings.videos(),
+                    "default_video": (
+                        settings.default_video.name if settings.default_video else None
+                    ),
+                })
             except (OSError, ValueError) as error:
                 self.json_response(500, {"error": str(error)})
         else:

@@ -9,9 +9,10 @@ import cv2
 
 
 class VideoSettings:
-    def __init__(self, assets_dir, settings_path):
+    def __init__(self, assets_dir, settings_path, default_video=None):
         self.assets_dir = Path(assets_dir).resolve()
         self.settings_path = Path(settings_path)
+        self.default_video = Path(default_video) if default_video is not None else None
         self.lock = threading.Lock()
         self.revision = 0
         self.choice = {"mode": "default"}
@@ -29,6 +30,7 @@ class VideoSettings:
         return sorted(
             (path.name for path in self.assets_dir.iterdir()
              if path.suffix.lower() == ".mp4" and path.is_file()
+             and path.name.casefold() != "sample_input.mp4"
              and path.resolve().parent == self.assets_dir),
             key=str.casefold,
         )
@@ -39,12 +41,12 @@ class VideoSettings:
         mode = value.get("mode")
         if mode == "random" and set(value) == {"mode"}:
             if not self.videos():
-                raise ValueError("No MP4 videos found in the assets folder.")
+                raise ValueError(f"No eligible MP4 videos found in: {self.assets_dir}")
             return {"mode": "random"}
         if mode == "file" and set(value) == {"mode", "file"}:
             name = value["file"]
             if not isinstance(name, str) or name not in self.videos():
-                raise ValueError("Choose an MP4 file from the assets folder.")
+                raise ValueError("Choose an eligible MP4 file from the video folder.")
             return {"mode": "file", "file": name}
         raise ValueError("Invalid video setting.")
 
@@ -86,13 +88,18 @@ class VideoSettings:
         finally:
             capture.release()
 
-    def path_for(self, choice, default_path):
-        if choice["mode"] == "default":
-            return default_path
-        if choice["mode"] == "random":
+    def is_random(self, choice):
+        return choice["mode"] == "random" or (
+            choice["mode"] == "default" and self.default_video is None
+        )
+
+    def path_for(self, choice):
+        if choice["mode"] == "default" and self.default_video is not None:
+            return self.default_video
+        if self.is_random(choice):
             videos = self.videos()
             if not videos:
-                raise ValueError("No MP4 videos found in the assets folder.")
+                raise ValueError(f"No eligible MP4 videos found in: {self.assets_dir}")
             return self.assets_dir / random.choice(videos)
         self.validate(choice)
         return self.assets_dir / choice["file"]

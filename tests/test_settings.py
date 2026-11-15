@@ -16,6 +16,8 @@ class VideoSettingsTests(unittest.TestCase):
         self.assets.mkdir()
         (self.assets / "fish.mp4").write_bytes(b"video")
         (self.assets / "fire.MP4").write_bytes(b"video")
+        (self.assets / "sample_input.mp4").write_bytes(b"video")
+        (self.assets / "SAMPLE_INPUT.MP4").write_bytes(b"video")
         (self.assets / "notes.txt").write_text("not video")
         self.path = root / ".happyspace-settings" / "config.json"
         self.settings = VideoSettings(self.assets, self.path)
@@ -30,7 +32,7 @@ class VideoSettingsTests(unittest.TestCase):
                          {"mode": "file", "file": "fish.mp4"})
         restored = VideoSettings(self.assets, self.path)
         self.assertEqual(restored.snapshot()[0], {"mode": "file", "file": "fish.mp4"})
-        self.assertEqual(restored.path_for(restored.snapshot()[0], Path("default")),
+        self.assertEqual(restored.path_for(restored.snapshot()[0]),
                          self.assets / "fish.mp4")
 
     def test_random_selects_from_current_files_at_each_boundary(self):
@@ -38,8 +40,41 @@ class VideoSettingsTests(unittest.TestCase):
         restored = VideoSettings(self.assets, self.path)
         choice, _ = restored.snapshot()
         with patch("src.settings.random.choice", side_effect=["fish.mp4", "fire.MP4"]):
-            self.assertEqual(restored.path_for(choice, None), self.assets / "fish.mp4")
-            self.assertEqual(restored.path_for(choice, None), self.assets / "fire.MP4")
+            self.assertEqual(restored.path_for(choice), self.assets / "fish.mp4")
+            self.assertEqual(restored.path_for(choice), self.assets / "fire.MP4")
+
+    def test_explicit_config_video_and_saved_overrides(self):
+        explicit = self.assets / "fish.mp4"
+        settings = VideoSettings(self.assets, self.path, explicit)
+        default, _ = settings.snapshot()
+        self.assertFalse(settings.is_random(default))
+        with patch("src.settings.random.choice") as pick:
+            self.assertEqual(settings.path_for(default), explicit)
+        pick.assert_not_called()
+
+        settings.save({"mode": "random"})
+        restored = VideoSettings(self.assets, self.path, explicit)
+        choice, _ = restored.snapshot()
+        self.assertTrue(restored.is_random(choice))
+        with patch("src.settings.random.choice", return_value="fire.MP4"):
+            self.assertEqual(restored.path_for(choice), self.assets / "fire.MP4")
+
+        with patch.object(VideoSettings, "check_video"):
+            restored.save({"mode": "file", "file": "fire.MP4"})
+        restored = VideoSettings(self.assets, self.path, explicit)
+        choice, _ = restored.snapshot()
+        self.assertFalse(restored.is_random(choice))
+        self.assertEqual(restored.path_for(choice), self.assets / "fire.MP4")
+
+    def test_default_random_selection_excludes_sample_and_tracks_new_files(self):
+        choice, _ = self.settings.snapshot()
+        with patch("src.settings.random.choice", side_effect=lambda videos: videos[-1]) as pick:
+            self.assertEqual(self.settings.path_for(choice), self.assets / "fish.mp4")
+            (self.assets / "new.mp4").write_bytes(b"video")
+            self.assertEqual(self.settings.path_for(choice), self.assets / "new.mp4")
+        self.assertEqual(pick.call_args_list[0].args[0], ["fire.MP4", "fish.mp4"])
+        self.assertEqual(pick.call_args_list[1].args[0],
+                         ["fire.MP4", "fish.mp4", "new.mp4"])
 
     def test_invalid_missing_and_outside_files_rejected(self):
         outside = self.assets.parent / "outside.mp4"
@@ -49,6 +84,7 @@ class VideoSettingsTests(unittest.TestCase):
             {"mode": "file", "file": "../outside.mp4"},
             {"mode": "file", "file": "link.mp4"},
             {"mode": "file", "file": "missing.mp4"},
+            {"mode": "file", "file": "sample_input.mp4"},
             {"mode": "file", "file": []},
             {"mode": "random", "file": "fish.mp4"},
             {"mode": "unknown"}, [],
@@ -60,11 +96,13 @@ class VideoSettingsTests(unittest.TestCase):
     def test_no_videos_and_removed_selection_report_errors(self):
         (self.assets / "fish.mp4").unlink()
         (self.assets / "fire.MP4").unlink()
-        with self.assertRaisesRegex(ValueError, "No MP4"):
+        with self.assertRaisesRegex(ValueError, "No eligible MP4"):
             self.settings.save({"mode": "random"})
+        with self.assertRaisesRegex(ValueError, "No eligible MP4"):
+            self.settings.path_for({"mode": "default"})
         self.path.parent.mkdir()
         self.path.write_text('{"mode":"file","file":"fish.mp4"}')
-        with self.assertRaisesRegex(ValueError, "Choose an MP4"):
+        with self.assertRaisesRegex(ValueError, "Choose an eligible MP4"):
             VideoSettings(self.assets, self.path)
 
     def test_save_failure_does_not_change_live_or_persisted_setting(self):

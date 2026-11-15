@@ -249,8 +249,8 @@ video; audio is not part of this pipeline.
    If creating the environment fails, install `python3-venv` with apt first.
    OpenCV wheels and video codecs must be supported by your system; do not use
    the headless OpenCV package for the fullscreen window.
-3. The repository includes `assets/fishtank.mp4`. Edit `config.json` if your
-   capture device or video file differs.
+3. The repository includes calming videos in `assets`. Edit `config.json` if
+   your capture device or calming-video folder differs.
 4. From the project directory, run:
 
    ```bash
@@ -280,9 +280,16 @@ The OpenCV window must have keyboard focus.
 | Key | Meaning |
 | --- | --- |
 | `capture_device_id` | OpenCV capture device index, typically `0`; select the index corresponding to your capture hardware. Set a video file path (relative to `config.json`), such as `"assets/sample_input.mp4"`, to simulate live input with a looping file. |
-| `calming_video_path` | Path to a local video, relative to the config file or absolute. |
+| `calming_video_path` | A calming MP4 file or a folder of MP4 videos, relative to the config file or absolute. |
 | `timer_font_scale` | OpenCV font scale for the countdown. |
 | `timer_color` | Countdown text color as an OpenCV BGR triplet, for example `[255, 255, 255]` for white. |
+
+When a folder is configured, the app randomly selects a video when calming
+playback starts and whenever a video ends. It considers MP4 files directly in
+that folder, excluding `sample_input.mp4` (case-insensitive); it does not
+follow links outside that folder. The same video may be chosen more than once.
+When a specific MP4 file is configured, it plays and loops that file instead.
+Saved remote selections override either default.
 
 The program reports capture and video open/read errors and exits rather than
 pretending a failed video is playing. Check device permissions, codec support,
@@ -352,24 +359,24 @@ from the newly selected duration. **Live video**, **Calming video**, or
 enabling demo mode cancels the timer; **Calming video** continues without a
 timer. The keyboard's `m` and `d` controls likewise override timed playback.
 
-Select **Setup** on the remote to choose an MP4 file from the project's
-`assets` folder, or choose **Random video**, then select **Save settings**.
-The list includes files directly in that folder, including `.MP4`; it does not
-include subfolders or links to files outside the folder. Reopen Setup to
+Select **Setup** on the remote to choose an MP4 file from the configured
+calming-video folder (or the configured file's parent folder), or choose
+**Random video**, then select **Save settings**.
+The list includes eligible files directly in that folder, including `.MP4`;
+it excludes `sample_input.mp4`, subfolders, and links to files outside the folder. Reopen Setup to
 refresh the list after adding or removing files. A fixed selection loops that
-file. Random mode picks a video each time one finishes; the same video can be
-chosen more than once. A saved change applies on the next capture frame, even
+file. Random mode picks a video when calming playback starts and each time one
+finishes; the same video can be chosen more than once. A saved change applies on the next capture frame, even
 when the calming video is already showing.
 
 The selection is saved in `.happyspace-settings/<config filename>` alongside
 the chosen configuration file, and is reused on restart, including when the
 web remote is disabled. The settings directory is ignored by Git and is not
-shared automatically between computers. Until a choice is saved, the existing
-`calming_video_path` setting remains in effect, including paths outside
-`assets`. To return to that default, stop the app and remove the settings
+shared automatically between computers. Until a choice is saved, the file or
+folder in `calming_video_path` determines playback. To return to that default, stop the app and remove the settings
 file for the relevant configuration. If a saved video is removed, restore it
-or remove that settings file before restarting. An empty assets folder cannot
-be used for random mode; unreadable videos produce an error rather than a
+or remove that settings file before restarting. A folder without eligible MP4
+files cannot be used for random mode; unreadable videos produce an error rather than a
 placeholder.
 
 The default listener binds to all IPv4 interfaces on port 8080, not just
@@ -500,7 +507,7 @@ To keep Pi-specific settings separate from the tracked `config.json`, create a
 copy once with `cp config.json config.pi.json`, edit it, and start with
 `python3 main.py --config config.pi.json` (or use `.venv/bin/python` for a
 virtual environment). Keep the copy in the project directory so its relative
-video path still points to `assets/fishtank.mp4`. Do not rerun the copy command
+video path still points to `assets`. Do not rerun the copy command
 if it would overwrite settings you want to keep.
 
 [Back to contents](#contents)

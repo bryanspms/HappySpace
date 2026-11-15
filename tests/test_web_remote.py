@@ -175,7 +175,8 @@ class WebRemoteTests(unittest.TestCase):
         code, data = self.request("GET", "/api/settings")
         self.assertEqual(code, 200)
         self.assertEqual(json.loads(data),
-                         {"video": {"mode": "default"}, "videos": ["fireplace.mp4"]})
+                         {"video": {"mode": "default"}, "videos": ["fireplace.mp4"],
+                          "default_video": None})
         code, _ = self.request("POST", "/api/settings", '{"mode":"random"}')
         self.assertEqual(code, 200)
         self.assertEqual(json.loads(self.settings.settings_path.read_text()),
@@ -185,6 +186,13 @@ class WebRemoteTests(unittest.TestCase):
         self.assertEqual(self.request("POST", "/api/settings",
                                       '{"mode":"file","file":"../outside.mp4"}')[0], 400)
         self.assertEqual(self.settings.snapshot()[0], {"mode": "random"})
+
+    def test_settings_report_explicit_config_video(self):
+        self.settings.default_video = self.settings.assets_dir / "fireplace.mp4"
+        code, data = self.request("GET", "/api/settings")
+        self.assertEqual(code, 200)
+        self.assertEqual(json.loads(data)["default_video"], "fireplace.mp4")
+        self.assertEqual(json.loads(data)["video"], {"mode": "default"})
 
 
 class PasswordTests(unittest.TestCase):

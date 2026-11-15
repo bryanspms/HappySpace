@@ -178,7 +178,153 @@ class PlayerTests(unittest.TestCase):
         capture.release.assert_called_once()
 
 
+class RandomPlaybackIntegrationTests(unittest.TestCase):
+    @patch("main.cv2.destroyAllWindows")
+    @patch("main.cv2.waitKey", side_effect=[ord("m"), ord("q")])
+    @patch("main.cv2.imshow")
+    @patch("main.cv2.setWindowProperty")
+    @patch("main.cv2.namedWindow")
+    @patch("main.CalmingVideoPlayer")
+    @patch("main.VideoCapture")
+    def test_explicit_config_video_plays_without_random_selection(
+        self, capture_type, player_type, named_window, set_window_property,
+        imshow, wait_key, destroy_windows,
+    ):
+        capture_type.return_value.read_frame.return_value = (True, "live")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "fixed.MP4").touch()
+            (root / "other.mp4").touch()
+            config = root / "config.json"
+            config.write_text(json.dumps({
+                "capture_device_id": 0, "calming_video_path": "fixed.MP4"
+            }))
+            with patch("src.settings.random.choice") as pick:
+                main.run(config)
+            pick.assert_not_called()
+            player_type.assert_called_once_with(root / "fixed.MP4",
+                                                1.0, [255, 255, 255])
+            player_type.return_value.reset.assert_called_once()
+            player_type.return_value.switch.assert_not_called()
+            self.assertIsNone(player_type.return_value.next_video)
+
+    @patch("main.cv2.destroyAllWindows")
+    @patch("main.cv2.waitKey", side_effect=[ord("m"), ord("q")])
+    @patch("main.cv2.imshow")
+    @patch("main.cv2.setWindowProperty")
+    @patch("main.cv2.namedWindow")
+    @patch("main.CalmingVideoPlayer")
+    @patch("main.VideoCapture")
+    def test_saved_random_overrides_explicit_config_video(
+        self, capture_type, player_type, named_window, set_window_property,
+        imshow, wait_key, destroy_windows,
+    ):
+        capture_type.return_value.read_frame.return_value = (True, "live")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("fixed.mp4", "other.mp4"):
+                (root / name).touch()
+            config = root / "config.json"
+            config.write_text(json.dumps({
+                "capture_device_id": 0, "calming_video_path": str(root / "fixed.mp4")
+            }))
+            settings_dir = root / ".happyspace-settings"
+            settings_dir.mkdir()
+            (settings_dir / config.name).write_text('{"mode":"random"}')
+            with patch("src.settings.random.choice",
+                       side_effect=["fixed.mp4", "other.mp4"]):
+                main.run(config)
+            player_type.return_value.switch.assert_called_once_with(root / "other.mp4")
+            self.assertTrue(callable(player_type.return_value.next_video))
+
+    @patch("main.cv2.destroyAllWindows")
+    @patch("main.cv2.waitKey")
+    @patch("main.cv2.imshow")
+    @patch("main.cv2.setWindowProperty")
+    @patch("main.cv2.namedWindow")
+    @patch("main.CalmingVideoPlayer")
+    @patch("main.VideoCapture")
+    def test_configured_folder_is_used_at_transitions_and_video_end(
+        self, capture_type, player_type, named_window, set_window_property,
+        imshow, wait_key, destroy_windows,
+    ):
+        capture_type.return_value.read_frame.return_value = (True, "live")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            videos = root / "my-videos"
+            videos.mkdir()
+            for name in ("first.mp4", "second.MP4", "sample_input.mp4"):
+                (videos / name).touch()
+            config = root / "config.json"
+            config.write_text(json.dumps({
+                "capture_device_id": 0, "calming_video_path": "my-videos"
+            }))
+            player = player_type.return_value
+            boundary_result = []
+
+            def at_boundary():
+                boundary_result.append(player.next_video())
+                return ord("m")
+
+            actions = iter([lambda: ord("m"), at_boundary,
+                            lambda: ord("m"), lambda: ord("q")])
+            wait_key.side_effect = lambda _: next(actions)()
+            with patch("src.settings.random.choice",
+                       side_effect=["first.mp4", "second.MP4",
+                                    "first.mp4", "second.MP4"]) as pick:
+                main.run(config)
+            player_type.assert_called_once_with(videos / "first.mp4",
+                                                1.0, [255, 255, 255])
+            self.assertEqual(player.switch.call_args_list,
+                             [call(videos / "second.MP4"),
+                              call(videos / "second.MP4")])
+            self.assertEqual(boundary_result, [videos / "first.mp4"])
+            for args in pick.call_args_list:
+                self.assertEqual(args.args[0], ["first.mp4", "second.MP4"])
+
+    @patch("main.cv2.destroyAllWindows")
+    @patch("main.cv2.waitKey", side_effect=[ord("m"), ord("q")])
+    @patch("main.cv2.imshow")
+    @patch("main.cv2.setWindowProperty")
+    @patch("main.cv2.namedWindow")
+    @patch("main.CalmingVideoPlayer")
+    @patch("main.VideoCapture")
+    def test_saved_fixed_selection_is_preserved(
+        self, capture_type, player_type, named_window, set_window_property,
+        imshow, wait_key, destroy_windows,
+    ):
+        capture_type.return_value.read_frame.return_value = (True, "live")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            videos = root / "videos"
+            videos.mkdir()
+            (videos / "fixed.mp4").touch()
+            config = root / "config.json"
+            config.write_text(json.dumps({
+                "capture_device_id": 0, "calming_video_path": "videos"
+            }))
+            settings_dir = root / ".happyspace-settings"
+            settings_dir.mkdir()
+            (settings_dir / config.name).write_text(
+                json.dumps({"mode": "file", "file": "fixed.mp4"})
+            )
+            main.run(config)
+            player_type.assert_called_once_with(videos / "fixed.mp4",
+                                                1.0, [255, 255, 255])
+            player_type.return_value.reset.assert_called_once()
+            player_type.return_value.switch.assert_not_called()
+
+
 class ApplicationTests(unittest.TestCase):
+    def setUp(self):
+        videos = patch("src.settings.VideoSettings.videos",
+                       return_value=["fireplace.mp4", "fishtank.mp4"])
+        check_video = patch("src.settings.VideoSettings.check_video")
+        videos.start()
+        check_video.start()
+        self.addCleanup(videos.stop)
+        self.addCleanup(check_video.stop)
+
     @patch("src.controller.time.monotonic")
     @patch("main.cv2.destroyAllWindows")
     @patch("main.cv2.waitKey")
@@ -374,7 +520,7 @@ class ApplicationTests(unittest.TestCase):
             self.assertEqual(json.loads(setting_path.read_text()),
                              {"mode": "file", "file": "fishtank.mp4"})
         player_type.return_value.switch.assert_called_once_with(
-            Path(main.__file__).resolve().parent / "assets" / "fishtank.mp4"
+            config.parent / "fishtank.mp4"
         )
 
     @patch("main.cv2.destroyAllWindows")
@@ -506,6 +652,7 @@ class ApplicationTests(unittest.TestCase):
         )
         player.get_frame.assert_called_once_with(None)
         player.reset.assert_called_once()
+        player.switch.assert_not_called()
         capture.release.assert_called_once()
         player.release.assert_called_once()
         destroy_windows.assert_called_once()
