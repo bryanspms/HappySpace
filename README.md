@@ -55,7 +55,7 @@ the remaining time.
   video, or use the remote to play a calming video for a selected duration;
   the live picture is selected at startup.
 - Offers an **opt-in simulated detector** for testing: 10 seconds of live video,
-  followed by a 5-second simulated break, repeating. Its countdown is based on
+  followed by a 10-second simulated break, repeating. Its countdown is based on
   that simulation, not on the input signal.
 - Optionally provides a password-protected web remote for a phone or other
   device on the local network.
@@ -285,7 +285,7 @@ The OpenCV window must have keyboard focus.
 | `timer_color` | Countdown text color as an OpenCV BGR triplet, for example `[255, 255, 255]` for white. |
 
 When a folder is configured, the app randomly selects a video when calming
-playback starts and whenever a video ends. It considers MP4 files directly in
+playback starts, and loops that video until playback ends. It considers MP4 files directly in
 that folder, excluding `sample_input.mp4` (case-insensitive); it does not
 follow links outside that folder. The same video may be chosen more than once.
 When a specific MP4 file is configured, it plays and loops that file instead.
@@ -350,8 +350,7 @@ To play a calming video temporarily, choose **30, 60, 90, or 120** under
 **Duration in seconds**, then select **Play for selected seconds**. The
 currently configured fixed or random video selection plays until the time
 expires, with a countdown on the video, then the app returns to live video.
-Fixed videos loop and random mode selects another video at each ending as
-usual. The duration is measured from when the app processes the command and
+The selected video loops for the duration. The duration is measured from when the app processes the command and
 the transition happens on the next available frame.
 
 Timed playback turns off demo mode. Starting it again restarts the countdown
@@ -365,8 +364,8 @@ calming-video folder (or the configured file's parent folder), or choose
 The list includes eligible files directly in that folder, including `.MP4`;
 it excludes `sample_input.mp4`, subfolders, and links to files outside the folder. Reopen Setup to
 refresh the list after adding or removing files. A fixed selection loops that
-file. Random mode picks a video when calming playback starts and each time one
-finishes; the same video can be chosen more than once. A saved change applies on the next capture frame, even
+file. Random mode picks a video when calming playback starts and loops it
+until playback ends; the same video can be chosen more than once. A saved change applies on the next capture frame, even
 when the calming video is already showing.
 
 The selection is saved in `.happyspace-settings/<config filename>` alongside

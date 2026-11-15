@@ -12,7 +12,7 @@ class CommercialDetector:
         self.started_at = time.monotonic()
 
     def analyze_frame(self, frame):
-        elapsed = (time.monotonic() - self.started_at) % 15
+        elapsed = (time.monotonic() - self.started_at) % 20
         if elapsed < 10:
             return False, None
-        return True, math.ceil(15 - elapsed)
+        return True, math.ceil(20 - elapsed)

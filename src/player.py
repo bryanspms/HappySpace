@@ -2,11 +2,10 @@ import cv2
 
 
 class CalmingVideoPlayer:
-    def __init__(self, video_path, font_scale=1.0, color=(255, 255, 255), next_video=None):
+    def __init__(self, video_path, font_scale=1.0, color=(255, 255, 255)):
         self.video_path = video_path
         self.font_scale = font_scale
         self.color = tuple(color)
-        self.next_video = next_video
         self.cap = cv2.VideoCapture(str(video_path))
         if not self.cap.isOpened():
             self.cap.release()
@@ -27,10 +26,7 @@ class CalmingVideoPlayer:
     def get_frame(self, time_remaining):
         ret, frame = self.cap.read()
         if not ret:
-            if self.next_video is None:
-                self.reset()
-            else:
-                self.switch(self.next_video())
+            self.reset()
             ret, frame = self.cap.read()
         if not ret or frame is None:
             self.cap.release()

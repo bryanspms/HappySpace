@@ -22,9 +22,11 @@ class DetectorTests(unittest.TestCase):
         for now, expected in [
             (100, (False, None)),
             (109.99, (False, None)),
-            (110, (True, 5)),
-            (114.9, (True, 1)),
-            (115, (False, None)),
+            (110, (True, 10)),
+            (115, (True, 5)),
+            (119.9, (True, 1)),
+            (120, (False, None)),
+            (130, (True, 10)),
         ]:
             with self.subTest(now=now):
                 clock.return_value = now
@@ -107,20 +109,20 @@ class ControllerTests(unittest.TestCase):
 
 class PlayerTests(unittest.TestCase):
     @patch("src.player.cv2.VideoCapture")
-    def test_random_mode_switches_at_end_of_video(self, video_capture):
-        first, second = Mock(), Mock()
-        first.isOpened.return_value = second.isOpened.return_value = True
-        first.read.return_value = (False, None)
-        second.read.return_value = (True, "next frame")
-        video_capture.side_effect = [first, second]
-        next_video = Mock(return_value=Path("next.mp4"))
-        player = CalmingVideoPlayer("first.mp4", next_video=next_video)
-        self.assertEqual(player.get_frame(None), "next frame")
-        next_video.assert_called_once()
-        self.assertEqual(player.video_path, Path("next.mp4"))
-        first.release.assert_called_once()
+    def test_repeated_video_endings_loop_same_video(self, video_capture):
+        capture = video_capture.return_value
+        capture.isOpened.return_value = True
+        capture.read.side_effect = [(False, None), (True, "frame"),
+                                    (False, None), (True, "frame")]
+        player = CalmingVideoPlayer("first.mp4")
+        self.assertEqual(player.get_frame(None), "frame")
+        self.assertEqual(player.get_frame(None), "frame")
+        self.assertEqual(player.video_path, "first.mp4")
+        self.assertEqual(capture.set.call_args_list,
+                         [call(cv2.CAP_PROP_POS_FRAMES, 0)] * 2)
+        video_capture.assert_called_once_with("first.mp4")
         player.release()
-        second.release.assert_called_once()
+        capture.release.assert_called_once()
 
     @patch("src.player.cv2.VideoCapture")
     def test_failed_switch_preserves_original_capture(self, video_capture):
@@ -180,6 +182,45 @@ class PlayerTests(unittest.TestCase):
 
 class RandomPlaybackIntegrationTests(unittest.TestCase):
     @patch("main.cv2.destroyAllWindows")
+    @patch("main.cv2.waitKey", side_effect=[ord("m"), -1, ord("q")])
+    @patch("main.cv2.imshow")
+    @patch("main.cv2.setWindowProperty")
+    @patch("main.cv2.namedWindow")
+    @patch("src.player.cv2.VideoCapture")
+    @patch("main.VideoCapture")
+    def test_random_video_loops_until_break_ends(
+        self, capture_type, video_capture, named_window, set_window_property,
+        imshow, wait_key, destroy_windows,
+    ):
+        capture_type.return_value.read_frame.return_value = (True, "live")
+        initial, selected = Mock(), Mock()
+        initial.isOpened.return_value = selected.isOpened.return_value = True
+        selected.read.side_effect = [(False, None), (True, "calm"),
+                                     (False, None), (True, "calm")]
+        video_capture.side_effect = [initial, selected]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("first.mp4", "second.mp4", "sample_input.mp4"):
+                (root / name).touch()
+            config = root / "config.json"
+            config.write_text(json.dumps({
+                "capture_device_id": 0, "calming_video_path": "."
+            }))
+            with patch("src.settings.random.choice",
+                       side_effect=["first.mp4", "second.mp4"]) as pick:
+                main.run(config)
+            self.assertEqual(pick.call_count, 2)
+            self.assertEqual(video_capture.call_args_list,
+                             [call(str(root / "first.mp4")),
+                              call(str(root / "second.mp4"))])
+            self.assertEqual(selected.set.call_args_list,
+                             [call(cv2.CAP_PROP_POS_FRAMES, 0)] * 2)
+            self.assertEqual(imshow.call_args_list,
+                             [call("Happy Space", "live"),
+                              call("Happy Space", "calm"),
+                              call("Happy Space", "calm")])
+
+    @patch("main.cv2.destroyAllWindows")
     @patch("main.cv2.waitKey", side_effect=[ord("m"), ord("q")])
     @patch("main.cv2.imshow")
     @patch("main.cv2.setWindowProperty")
@@ -206,7 +247,6 @@ class RandomPlaybackIntegrationTests(unittest.TestCase):
                                                 1.0, [255, 255, 255])
             player_type.return_value.reset.assert_called_once()
             player_type.return_value.switch.assert_not_called()
-            self.assertIsNone(player_type.return_value.next_video)
 
     @patch("main.cv2.destroyAllWindows")
     @patch("main.cv2.waitKey", side_effect=[ord("m"), ord("q")])
@@ -235,7 +275,6 @@ class RandomPlaybackIntegrationTests(unittest.TestCase):
                        side_effect=["fixed.mp4", "other.mp4"]):
                 main.run(config)
             player_type.return_value.switch.assert_called_once_with(root / "other.mp4")
-            self.assertTrue(callable(player_type.return_value.next_video))
 
     @patch("main.cv2.destroyAllWindows")
     @patch("main.cv2.waitKey")
@@ -244,7 +283,7 @@ class RandomPlaybackIntegrationTests(unittest.TestCase):
     @patch("main.cv2.namedWindow")
     @patch("main.CalmingVideoPlayer")
     @patch("main.VideoCapture")
-    def test_configured_folder_is_used_at_transitions_and_video_end(
+    def test_configured_folder_selects_video_at_each_transition(
         self, capture_type, player_type, named_window, set_window_property,
         imshow, wait_key, destroy_windows,
     ):
@@ -260,25 +299,19 @@ class RandomPlaybackIntegrationTests(unittest.TestCase):
                 "capture_device_id": 0, "calming_video_path": "my-videos"
             }))
             player = player_type.return_value
-            boundary_result = []
-
-            def at_boundary():
-                boundary_result.append(player.next_video())
-                return ord("m")
-
-            actions = iter([lambda: ord("m"), at_boundary,
+            actions = iter([lambda: ord("m"), lambda: ord("m"),
                             lambda: ord("m"), lambda: ord("q")])
             wait_key.side_effect = lambda _: next(actions)()
             with patch("src.settings.random.choice",
                        side_effect=["first.mp4", "second.MP4",
-                                    "first.mp4", "second.MP4"]) as pick:
+                                    "first.mp4"]) as pick:
                 main.run(config)
             player_type.assert_called_once_with(videos / "first.mp4",
                                                 1.0, [255, 255, 255])
             self.assertEqual(player.switch.call_args_list,
                              [call(videos / "second.MP4"),
-                              call(videos / "second.MP4")])
-            self.assertEqual(boundary_result, [videos / "first.mp4"])
+                              call(videos / "first.mp4")])
+            self.assertNotIn("next_video", player.__dict__)
             for args in pick.call_args_list:
                 self.assertEqual(args.args[0], ["first.mp4", "second.MP4"])
 

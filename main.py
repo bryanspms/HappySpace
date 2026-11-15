@@ -43,9 +43,6 @@ def run(config_path, web_address=None, web_password=None):
             config.get("timer_font_scale", 1.0),
             config.get("timer_color", [255, 255, 255]),
         )
-        player.next_video = (
-            lambda: settings.path_for(settings.snapshot()[0])
-        ) if settings.is_random(choice) else None
         controller = DisplayController(CommercialDetector())
 
         cv2.namedWindow("Happy Space", cv2.WND_PROP_FULLSCREEN)
@@ -72,9 +69,6 @@ def run(config_path, web_address=None, web_password=None):
             choice, revision = settings.snapshot()
             if revision != settings_revision:
                 player.switch(settings.path_for(choice))
-                player.next_video = (
-                    lambda: settings.path_for(settings.snapshot()[0])
-                ) if settings.is_random(choice) else None
                 settings_revision = revision
             use_calming_video, remaining = controller.selection(live_frame)
             if remote_state is not None:
