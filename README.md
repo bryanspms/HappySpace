@@ -42,7 +42,9 @@ the remaining time.
 | Video Capture Card | [View item](https://a.co/d/00CWJ8EB) | $30.00 |
 | USB Speakers | [View item](https://a.co/d/0bKFKzn3) | $13.99 |
 | USB to USB Adapters | [View item](https://a.co/d/01O1zsPw) | $9.99 |
-| **Grand total** | | **$297.20** |
+| Micro HDMI to HDMI Adapter | [view item](https://a.co/d/04tXUgfw) | $8.99 |
+| HDMI Cable | [view item](https://a.co/d/073qQPdN) | $5.60 |
+| **Grand total** | | **$311.79** |
 
   - Cost was done at time of writing.  Please use these figures as a guideline only.
 
