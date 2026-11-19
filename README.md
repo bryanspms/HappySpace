@@ -68,6 +68,10 @@ an HDMI passthrough when it exits. Playback speed of the calming video currently
 depends on the capture loop, rather than the file's frame rate. Real-time
 performance, latency, and supported capture formats depend on the hardware.
 
+**Right now**, I am working on splitting the audio so we can hear the calming sounds while the calming video is playing.  I will also add audio controls to the remote.  
+This will be in the next release.
+
+
 [Back to contents](#contents)
 
 ## <span style="color:#E0B659">Screen Shots</span>
