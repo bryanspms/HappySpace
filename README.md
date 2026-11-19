@@ -98,6 +98,7 @@ flowchart LR
     phone["Phone or computer<br/>optional web remote"] -->|Controls over local network| pi
     pi -->|Status and preview| phone
 ```
+![Happy Space Hardware Overview](assets/happySpaceHardwareOverview.gif)
 
 You need a compatible USB HDMI capture device, a display, and suitable cables.
 The capture device can be replaced by a local sample video for testing.
@@ -535,6 +536,8 @@ flowchart LR
     detection -->|only if known| timer["Optional countdown"]
     timer --> output
 ```
+
+![Happy Space Future Architecture](assets/happySpaceFutureArchitecture.gif)
 
 Useful next steps include evaluating detection against labeled recordings,
 handling uncertain predictions and transitions, integrating synchronized audio,
